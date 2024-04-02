@@ -2,3 +2,5 @@
 /credentials.json
 /poetry.lock
 .idea
+/mac_chromedriver
+/win_chromedriver
