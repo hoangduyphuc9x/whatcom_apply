@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "whatcomapply"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.11.8"
+pyside6 = "^6.6.2"
+gologin = "^2024.3.13192259"
+selenium = "^4.18.1"
+google-api-python-client = "^2.123.0"
+google-auth-httplib2 = "^0.2.0"
+google-auth-oauthlib = "^1.2.0"
+opencv-python = "^4.9.0.80"
+numpy = "^1.26.4"
+pytesseract = "^0.3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
