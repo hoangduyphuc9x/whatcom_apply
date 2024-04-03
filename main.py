@@ -83,6 +83,7 @@ prompt_text_map = {
     "52": "誰もが今やお祖師と抽選を待ちわびていた",
 }
 
+
 def create_gologin_profile(gologin_profile_options: dict) -> dict:
     try:
         gologin_profile_proxy = gologin_profile_options["proxy"]
@@ -91,25 +92,26 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
         gologin_profile_os = gologin_profile_options["os"]
 
         get_gologin_fingerprint_result = get_gologin_fingerprint(go_login_token, gologin_profile_os)
-
-        if not get_gologin_fingerprint_result["error"]:
+        get_gologin_fingerprint_result_error = get_gologin_fingerprint_result.get("error")
+        if not get_gologin_fingerprint_result_error:
+            get_gologin_fingerprint_result_data = get_gologin_fingerprint_result.get("data")
             gologin_profile_proxy_splited = gologin_profile_proxy.split(":")
             proxy_info = {}
             if len(gologin_profile_proxy_splited) == 0:
                 proxy_info = {
                     "mode": "none",
-                    "host": None,
-                    "port": None,
-                    "username": None,
-                    "password": None
+                    "host": '',
+                    "port": '',
+                    "username": '',
+                    "password": ''
                 }
             elif len(gologin_profile_proxy_splited) == 2:
                 proxy_info = {
                     "mode": "http",
                     "host": gologin_profile_proxy_splited[0],
                     "port": int(gologin_profile_proxy_splited[1]),
-                    "username": None,
-                    "password": None
+                    "username": '',
+                    "password": ''
                 }
             elif len(gologin_profile_proxy_splited) == 4:
                 proxy_info = {
@@ -132,7 +134,7 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
                 "googleServicesEnabled": False,
                 "lockEnabled": False,
                 "debugMode": False,
-                "navigator": get_gologin_fingerprint_result["navigator"],
+                "navigator": get_gologin_fingerprint_result_data.get("navigator"),
                 "geoProxyInfo": {},
                 "storage": {
                     "local": True,
@@ -168,7 +170,7 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
                     "mode": "noise",
                 },
                 "fonts": {
-                    "families": get_gologin_fingerprint_result["fonts"],
+                    "families": get_gologin_fingerprint_result_data.get("fonts"),
                     "enableMasking": True,
                     "enableDomRect": True,
                 },
@@ -193,7 +195,7 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
                 "clientRects": {
                     "mode": "noise",
                 },
-                "webGLMetadata": get_gologin_fingerprint_result["webGlMetadata"],
+                "webGLMetadata": get_gologin_fingerprint_result_data.get("webGlMetadata"),
                 "extensions": {
                     "enabled": True,
                     "preloadCustom": True,
@@ -203,7 +205,7 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
                 "chromeExtensionsToAllProfiles": [],
                 "userChromeExtensions": [],
                 "folders": ["Tool Reg"],
-                "webglParams": get_gologin_fingerprint_result["webglParams"],
+                "webglParams": get_gologin_fingerprint_result_data.get("webglParams"),
             }
 
             try:
@@ -211,15 +213,23 @@ def create_gologin_profile(gologin_profile_options: dict) -> dict:
                     "Authorization": f"Bearer {go_login_token}",
                     "Content-type": "application/json",
                 })
-
-                return {"goLoginId": response.json()["id"], "error": False}
+                if response.status_code == 200 or response.status_code == 201:
+                    return {
+                        "error": None,
+                        "data": {
+                            "goLoginId": response.json().get("id")
+                        }
+                    }
+                else:
+                    return {
+                        "error": f'requests.post("https://api.gologin.com/browser") returns status code {response.status_code}'
+                    }
             except Exception as error:
-                return {"error": error}
-
+                return {"error": str(error)}
+        else:
+            return {"error": str(get_gologin_fingerprint_result_error)}
     except Exception as error:
-        return {"error": error}
-
-    return {"error": get_gologin_fingerprint_result["error"]}
+        return {"error": str(error)}
 
 
 def get_code_from_weightloss(username, password):
@@ -258,29 +268,31 @@ def get_gologin_fingerprint(go_login_token: str, gologin_profile_os="win") -> di
         navigator_data = data.get("navigator", {})
         user_agent = navigator_data.get("userAgent", "")
         return {
-            "error": False,
-            "navigator": {
-                "userAgent": user_agent,
-                "resolution": navigator_data.get("resolution", ""),
-                "language": navigator_data.get("language", ""),
-                "platform": navigator_data.get("platform", ""),
-                "hardwareConcurrency": navigator_data.get("hardwareConcurrency", ""),
-                "deviceMemory": navigator_data.get("deviceMemory", ""),
-                "maxTouchPoints": navigator_data.get("maxTouchPoints", ""),
-            },
-            "webglParams": data.get("webglParams", ""),
-            "webGlMetadata": {
-                "vendor": data.get("webGLMetadata", {}).get("vendor", ""),
-                "renderer": data.get("webGLMetadata", {}).get("renderer", ""),
-            },
-            "fonts": data.get("fonts", ""),
+            "error": None,
+            "data": {
+                "navigator": {
+                    "userAgent": user_agent,
+                    "resolution": navigator_data.get("resolution", ""),
+                    "language": navigator_data.get("language", ""),
+                    "platform": navigator_data.get("platform", ""),
+                    "hardwareConcurrency": navigator_data.get("hardwareConcurrency", ""),
+                    "deviceMemory": navigator_data.get("deviceMemory", ""),
+                    "maxTouchPoints": navigator_data.get("maxTouchPoints", ""),
+                },
+                "webglParams": data.get("webglParams", ""),
+                "webGlMetadata": {
+                    "vendor": data.get("webGLMetadata", {}).get("vendor", ""),
+                    "renderer": data.get("webGLMetadata", {}).get("renderer", ""),
+                },
+                "fonts": data.get("fonts", ""),
+            }
         }
-
     except Exception as error:
-        return {"error": True}
+        return {"error": str(error)}
 
 
 def setup_selenium_driver(debugger_address, chrome_driver_path):
+    # try:
     page_load_timeout = 120
     options = webdriver.ChromeOptions()
     options.add_argument('--disable-notifications')
@@ -288,12 +300,16 @@ def setup_selenium_driver(debugger_address, chrome_driver_path):
     service = Service(executable_path=chrome_driver_path)
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(page_load_timeout)
-
     return driver
+
+
+class IPHandleInGoogleSheetThread(QThread):
+    pass
 
 
 class GoLoginProfileCreateThread(QThread):
     gologin_profile_created_signal = Signal(dict)
+    gologin_profile_created_update_result_signal = Signal(dict)
     gologin_profile_driver_created_signal = Signal(dict)
 
     def __init__(self, gologin_profile_in_table_data, parent=None):
@@ -301,44 +317,104 @@ class GoLoginProfileCreateThread(QThread):
         self.gologin_profile_in_table_data = gologin_profile_in_table_data
 
     def run(self):
-        (profile_table_row_index, profile_table_gologin_data) = self.gologin_profile_in_table_data
+        profile_table_row_index, profile_table_gologin_data = self.gologin_profile_in_table_data
         try:
-            create_gologin_profile_result = create_gologin_profile({
-                'goLoginToken': profile_table_gologin_data["goLoginToken"],
-                'name': profile_table_gologin_data["name"],
-                'os': 'mac',
-                'proxy': profile_table_gologin_data["proxy"]
-            })
-            self.gologin_profile_created_signal.emit(
-                {"profile_table_row_index": profile_table_row_index, "result": create_gologin_profile_result})
-            go_login_id = create_gologin_profile_result["goLoginId"]
-            gl = GoLogin({
-                "token": profile_table_gologin_data["goLoginToken"],
-                "profile_id": go_login_id,
-                "port": random.randint(3500, 7000)
-            })
-            chrome_driver_path = None
-            if platform == "darwin":
-                chrome_driver_path = "./mac_chromedriver/chromedriver"
-            elif platform == "win32":
-                chrome_driver_path = "./win_chromedriver/chromedriver.exe"
-            gologin_profile_debugger_address = gl.start()
-            driver = setup_selenium_driver(gologin_profile_debugger_address, chrome_driver_path)
-            self.gologin_profile_driver_created_signal.emit(
-                {"profile_table_row_index": profile_table_row_index, "driver_created": driver})
+            create_gologin_profile_result = create_gologin_profile(
+                {
+                    'goLoginToken': profile_table_gologin_data.get("goLoginToken"),
+                    'name': profile_table_gologin_data.get("name"),
+                    'os': 'mac',
+                    'proxy': profile_table_gologin_data.get("proxy"),
+                }
+            )
+            create_gologin_profile_result_error = create_gologin_profile_result.get("error")
+            if create_gologin_profile_result_error:
+                self.gologin_profile_created_signal.emit(
+                    {
+                        "error": create_gologin_profile_result_error,
+                        "data": {
+                            "profile_table_row_index": profile_table_row_index
+                        }
+                    }
+                )
+                self.gologin_profile_created_update_result_signal.emit({
+                    "error": True,
+                    "message": f"Xảy ra lỗi khi tạo profile: {create_gologin_profile_result_error}",
+                    "profile_table_row_index": profile_table_row_index
+                })
+            else:
+                created_gologin_id = create_gologin_profile_result.get("data").get("goLoginId")
+                self.gologin_profile_created_update_result_signal.emit({
+                    "error": None,
+                    "message": f"Tạo thành công Profile GoLogin với ID {created_gologin_id}",
+                    "profile_table_row_index": profile_table_row_index
+                })
+                self.gologin_profile_created_signal.emit(
+                    {
+                        "error": None,
+                        "data": {
+                            "profile_table_row_index": profile_table_row_index,
+                            "goLoginId": created_gologin_id
+                        }
+                    }
+                )
+                gl = GoLogin({
+                    "token": profile_table_gologin_data["goLoginToken"],
+                    "profile_id": created_gologin_id,
+                    "port": random.randint(3500, 7000)
+                })
+                chrome_driver_path = None
+                if platform == "darwin":
+                    chrome_driver_path = "./mac_chromedriver/chromedriver"
+                elif platform == "win32":
+                    chrome_driver_path = "./win_chromedriver/chromedriver.exe"
+                gologin_profile_debugger_address = gl.start()
+                driver = setup_selenium_driver(gologin_profile_debugger_address, chrome_driver_path)
+                self.gologin_profile_created_update_result_signal.emit({
+                    "error": None,
+                    "message": f"Kết nối thành công hệ thống tự động với Profile GoLogin có ID {created_gologin_id}",
+                    "profile_table_row_index": profile_table_row_index
+                })
+                self.gologin_profile_driver_created_signal.emit(
+                    {
+                        "error": None,
+                        "data": {
+                            "profile_table_row_index": profile_table_row_index,
+                            "driver_created": driver
+                        }
+                    }
+                )
         except Exception as error:
+            self.gologin_profile_created_update_result_signal.emit({
+                "error": True,
+                "message": f"Xảy ra lỗi khi tạo profile: {str(error)}",
+                "profile_table_row_index": profile_table_row_index
+            })
             self.gologin_profile_created_signal.emit(
-                {"profile_table_row_index": profile_table_row_index, "error": str(error)})
+                {
+                    "error": str(error),
+                    "data": {
+                        "profile_table_row_index": profile_table_row_index,
+                    }
+                }
+            )
 
 
 class GoLoginContinueCreateProfileThread(QThread):
+    go_login_continue_create_profile_update_result_signal = Signal(dict)
+
     def __init__(self, gologin_continue_create_profile_data, parent=None):
         super().__init__(parent)
         self.gologin_continue_create_profile_data = gologin_continue_create_profile_data
 
     def run(self):
-        (profile_table_row_index, driver, whatcom_info) = self.gologin_continue_create_profile_data
+        profile_table_row_index, driver, whatcom_info = self.gologin_continue_create_profile_data
         try:
+            self.go_login_continue_create_profile_update_result_signal.emit({
+                "error": None,
+                "message": "Đang tìm Job Whatcom",
+                "profile_table_row_index": profile_table_row_index
+            })
             driver.get("https://contributor.appen.com/available-projects")
 
             try:
@@ -359,8 +435,11 @@ class GoLoginContinueCreateProfileThread(QThread):
                 time.sleep(15)
 
             except TimeoutException as timeout:
-                # Điều hướng đến link https://connect.appen.com/qrp/core/vendors/workflows/view và chờ cho đến khi load và redirect hoàn thành
-                print(timeout)
+                self.go_login_continue_create_profile_update_result_signal.emit({
+                    "error": True,
+                    "message": f"Không tìm thấy nút Apply Whatcom, chuyển hướng sang trang Academy",
+                    "profile_table_row_index": profile_table_row_index
+                })
 
             driver.get("https://connect.appen.com/qrp/core/vendors/workflows/view")
             try:
@@ -374,7 +453,7 @@ class GoLoginContinueCreateProfileThread(QThread):
                 )
                 for character in username_hotmail:
                     attributes0_element.send_keys(character)
-                    time.sleep(random.uniform(0,0.5))
+                    time.sleep(random.uniform(0, 0.5))
 
                 # Lấy element có ID attributes0_button, click
                 attributes0_button_element = WebDriverWait(driver, 10).until(
@@ -385,12 +464,12 @@ class GoLoginContinueCreateProfileThread(QThread):
                 time.sleep(5)
 
                 ok_button_element = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//div[@aria-describedby='email-verification']//button[text()='OK']"))
+                    EC.element_to_be_clickable(
+                        (By.XPATH, "//div[@aria-describedby='email-verification']//button[text()='OK']"))
                 )
                 ok_button_element.click()
 
                 time.sleep(5)
-
 
                 code_hotmail = None
                 for _ in range(5):
@@ -407,7 +486,7 @@ class GoLoginContinueCreateProfileThread(QThread):
                     )
                     for char in str(code_hotmail):
                         verificationCodes0_element.send_keys(char)
-                        time.sleep(random.uniform(0,0.5))
+                        time.sleep(random.uniform(0, 0.5))
 
                     time.sleep(2)
 
@@ -426,7 +505,6 @@ class GoLoginContinueCreateProfileThread(QThread):
                     options2[random_option_index2].click()
 
                     time.sleep(2)
-
 
                     # Trong element select có name attributes[3].stringValue, chọn option random trong 6 option cuối
                     attributes3_element = driver.find_element(By.CSS_SELECTOR,
@@ -469,7 +547,7 @@ class GoLoginContinueCreateProfileThread(QThread):
                                                               "input[name='attributes[7].stringValue']")
                     for char in random_value:
                         attributes7_element.send_keys(char)
-                        time.sleep(random.uniform(0,0.5))
+                        time.sleep(random.uniform(0, 0.5))
                     time.sleep(2)
 
                     # Trong element select có name attributes[8].stringValue, chọn option 5+
@@ -496,9 +574,9 @@ class GoLoginContinueCreateProfileThread(QThread):
                     save_button.click()
                     time.sleep(2)
 
-
                     # esign
-                    WebDriverWait(driver, 30).until(EC.url_contains("https://connect.appen.com/qrp/core/vendors/esign/view/microsoft_vendor_code_of_conduct/"))
+                    WebDriverWait(driver, 30).until(EC.url_contains("https://connect.appen.com/qrp/core/vendors/esign"
+                                                                    "/view/microsoft_vendor_code_of_conduct/"))
 
                     # Tìm và click vào element có id = checkboxAgree và value = true
                     checkbox_agree_element = WebDriverWait(driver, 10).until(
@@ -506,7 +584,6 @@ class GoLoginContinueCreateProfileThread(QThread):
                     )
                     checkbox_agree_element.click()
                     time.sleep(2)
-
 
                     # Tìm và click vào element input có name = sign
                     sign_input_element = WebDriverWait(driver, 10).until(
@@ -535,7 +612,8 @@ class GoLoginContinueCreateProfileThread(QThread):
 
                     # Đợi trang web load và redirect xong
                     WebDriverWait(driver, 30).until(
-                        EC.url_contains("https://connect.appen.com/qrp/core/vendors/esign/view/uhrs_judge_data_consent_2023"))
+                        EC.url_contains("https://connect.appen.com/qrp/core/vendors/esign/view"
+                                        "/uhrs_judge_data_consent_2023"))
 
                     # Tìm và click vào element có id = checkboxAgree và value = true
                     checkbox_agree_element = WebDriverWait(driver, 10).until(
@@ -580,7 +658,7 @@ class GoLoginContinueCreateProfileThread(QThread):
                             textarea_element.clear()
                             for character in prompt_text_map[prompt_number]:
                                 textarea_element.send_keys(character)
-                                time.sleep(random.uniform(0,0.5))
+                                time.sleep(random.uniform(0, 0.5))
 
                             time.sleep(2)
 
@@ -592,13 +670,31 @@ class GoLoginContinueCreateProfileThread(QThread):
                             time.sleep(8)
 
                         except Exception as e:
+                            # TODO
+                            """
+                            Nếu check thay nut OK, Apply xong, 
+                            danh dau la Done va update Apply thanh cong tren Google Sheet
+                            """
                             print("Error:", e)
                             break
-
+                else:
+                    self.go_login_continue_create_profile_update_result_signal.emit({
+                        "error": True,
+                        "message": f"Không nhận được code Hotmail",
+                        "profile_table_row_index": profile_table_row_index
+                    })
             except TimeoutException as timeout:
-                print(f'error: {timeout.msg}')
-        except TimeoutException as timeout:
-            print(f'error: {timeout.msg}')
+                self.go_login_continue_create_profile_update_result_signal.emit({
+                    "error": True,
+                    "message": f"Load trang Academy không thành công",
+                    "profile_table_row_index": profile_table_row_index
+                })
+        except Exception as e:
+            self.go_login_continue_create_profile_update_result_signal.emit({
+                "error": True,
+                "message": f"Co lỗi xảy ra khi tiếp tục chạy Profile Go Login: {str(e)}",
+                "profile_table_row_index": profile_table_row_index
+            })
         # finally:
         #     # Đóng trình duyệt
         #     driver.quit()
@@ -607,6 +703,29 @@ class GoLoginContinueCreateProfileThread(QThread):
 def generate_random_string(length):
     letters = string.ascii_letters + string.digits + string.punctuation
     return ''.join(random.choice(letters) for _ in range(length))
+
+
+def get_real_proxy_ip(proxy_ip, max_retries=3, retry_delay=1):
+    """
+    Get the real IP address for a proxy.
+
+    Args:
+        proxy_ip (str): The proxy IP address.
+        max_retries (int): Maximum number of retries in case of failure.
+        retry_delay (int): Delay between retries (in seconds).
+
+    Returns:
+        str or None: The real IP address or None if not successful.
+    """
+    for _ in range(max_retries):
+        try:
+            response = requests.get("https://api.ipify.org?format=json", proxies={'http': proxy_ip, 'https': proxy_ip})
+            if response.status_code == 200:
+                return response.json().get('ip')
+        except requests.RequestException as e:
+            print(f"Error occurred while fetching real IP for proxy {proxy_ip}: {e}")
+        time.sleep(retry_delay)
+    return None
 
 
 class MainWindow(QMainWindow):
@@ -655,35 +774,155 @@ class MainWindow(QMainWindow):
         for profile_table_row_index in range(self.profile_table.rowCount()):
             select_checkbox_in_box = self.profile_table.cellWidget(profile_table_row_index, 0)
             if select_checkbox_in_box.isChecked():
-                gologin_profile_create_thread = GoLoginProfileCreateThread((profile_table_row_index, {
-                    'goLoginToken': self.gologin_api_key_input.text(),
-                    'name': f'Windows {self.profile_table.item(profile_table_row_index, 6).text()}',
-                    'os': 'win',
-                    'proxy': self.profile_table.item(profile_table_row_index, 2).text(),
-                    'emailAppen': self.profile_table.item(profile_table_row_index, 8).text(),
-                    'passwordAppen': self.profile_table.item(profile_table_row_index, 9).text(),
-                    "email|password": self.profile_table.item(profile_table_row_index, 7).text()
-                }))
-                gologin_profile_create_thread.gologin_profile_created_signal.connect(self.update_profile_table)
-                gologin_profile_create_thread.gologin_profile_driver_created_signal.connect(
-                    self.update_gologin_profile_drivers)
-                self.gologin_profile_create_threads.append(gologin_profile_create_thread)
+                # Check Proxy before create Go Login Profile
+                raw_proxy = self.profile_table.item(profile_table_row_index, 2).text()
+                real_proxy_ip = None
+                raw_proxy_splited = raw_proxy.split(':')
+
+                if len(raw_proxy_splited) == 2:
+                    proxy_ip = f'http://{raw_proxy_splited[0]}:{raw_proxy_splited[1]}'
+                    real_proxy_ip = get_real_proxy_ip(proxy_ip)
+
+                elif len(raw_proxy_splited) == 4:
+                    proxy_ip = f'http://{raw_proxy_splited[2]}:{raw_proxy_splited[3]}@{raw_proxy_splited[0]}:{raw_proxy_splited[1]}'
+                    real_proxy_ip = get_real_proxy_ip(proxy_ip)
+
+                if real_proxy_ip:
+                    # real_proxy_ip = "real_ip_test"
+                    self.profile_table.setItem(profile_table_row_index, 3, QTableWidgetItem(real_proxy_ip))
+                    result = self.serviceSpreadSheet.values().get(
+                        spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                        range="IP!B3:B"
+                    ).execute()
+
+                    b_column_ip_sheet_values = result.get('values', [])
+                    if not b_column_ip_sheet_values:
+                        self.update_result_cell_profile_table({
+                            "error": True,
+                            "message": "Không tìm thấy giá tri mã số trong cột B của bảng IP",
+                            "profile_table_row_index": profile_table_row_index
+                        })
+                    else:
+                        for b_column_ip_sheet_value in b_column_ip_sheet_values:
+                            if b_column_ip_sheet_value[0] == self.profile_table.item(profile_table_row_index, 6).text():
+                                # Get A1 notation of the cell
+                                cell_row_index = b_column_ip_sheet_values.index(b_column_ip_sheet_value) + 3
+                                self.serviceSpreadSheet.values().batchUpdate(
+                                    spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                                    body={
+                                        "valueInputOption": "RAW",
+                                        "data": [
+                                            {
+                                                "range": f"IP!C{cell_row_index}",
+                                                "values": [[real_proxy_ip]]
+                                            },
+                                            {
+                                                "range": f"Tools!C{self.profile_table.item(profile_table_row_index, 1).text()}",
+                                                "values": [[real_proxy_ip]]
+                                            }
+                                        ]
+                                    }
+                                ).execute()
+                                request = self.serviceSpreadSheet.get(
+                                    spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE", ranges=f"IP!C{cell_row_index}",
+                                    includeGridData=True
+                                )
+                                response = request.execute()
+                                color_background_value = \
+                                    response["sheets"][0]["data"][0]["rowData"][0]["values"][0]["effectiveFormat"][
+                                        "backgroundColorStyle"]["rgbColor"]
+                                if color_background_value.get("red") != 1 or color_background_value.get(
+                                        "green") != 1 or color_background_value.get("blue") != 1:
+                                    self.update_result_cell_profile_table({
+                                        "error": True,
+                                        "message": "IP bị trùng! Bỏ qua.",
+                                        "profile_table_row_index": profile_table_row_index
+                                    })
+                                    self.serviceSpreadSheet.values().update(
+                                        spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                                        range=f"Tools!C{self.profile_table.item(profile_table_row_index, 1).text()}",
+                                        valueInputOption='RAW',
+                                        body={'values': [["IP bị trùng! Bỏ qua."]]}
+                                    ).execute()
+                                else:
+                                    gologin_profile_create_thread = GoLoginProfileCreateThread(
+                                        (profile_table_row_index, {
+                                            'goLoginToken': self.gologin_api_key_input.text(),
+                                            'name': f'Windows {self.profile_table.item(profile_table_row_index, 6).text()}',
+                                            'os': 'win',
+                                            'proxy': raw_proxy,
+                                            'emailAppen': self.profile_table.item(profile_table_row_index, 8).text(),
+                                            'passwordAppen': self.profile_table.item(profile_table_row_index, 9).text(),
+                                            "email|password": self.profile_table.item(profile_table_row_index, 7).text()
+                                        }))
+                                    gologin_profile_create_thread.gologin_profile_created_signal.connect(
+                                        self.update_profile_table)
+                                    (gologin_profile_create_thread.gologin_profile_created_update_result_signal
+                                     .connect(self.update_result_cell_profile_table))
+
+                                    gologin_profile_create_thread.gologin_profile_driver_created_signal.connect(
+                                        self.update_gologin_profile_drivers)
+                                    self.gologin_profile_create_threads.append(gologin_profile_create_thread)
+                else:
+                    self.update_result_cell_profile_table({
+                        "error": True,
+                        "message": "Không lấy được địa chỉ IP của Proxy. Bỏ qua.",
+                        "profile_table_row_index": profile_table_row_index
+                    })
+                    self.serviceSpreadSheet.values().update(
+                        spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                        range=f"Tools!C{self.profile_table.item(profile_table_row_index, 1).text()}",
+                        valueInputOption='RAW',
+                        body={'values': [["Không lấy được địa chỉ IP của Proxy. Bỏ qua."]]}
+                    ).execute()
         for gologin_profile_create_thread in self.gologin_profile_create_threads:
             gologin_profile_create_thread.start()
 
     def update_gologin_profile_drivers(self, driver_gologin_profile_created_data):
-        self.gologin_profile_selenium_drivers[driver_gologin_profile_created_data['profile_table_row_index']] = \
-            driver_gologin_profile_created_data['driver_created']
+        self.gologin_profile_selenium_drivers[
+            driver_gologin_profile_created_data.get('data').get('profile_table_row_index')] = \
+            driver_gologin_profile_created_data.get('data').get('driver_created')
 
     def update_profile_table(self, update_profile_table_data):
-        if not update_profile_table_data['result']['error']:
-            self.profile_table.setItem(update_profile_table_data['profile_table_row_index'],
+        update_profile_table_data_error = update_profile_table_data.get("error")
+        if not update_profile_table_data_error:
+            result_item_in_project_table = QTableWidgetItem(update_profile_table_data_error)
+            result_item_in_project_table.setForeground(QColor("green"))
+            self.profile_table.setItem(update_profile_table_data.get("data").get('profile_table_row_index'),
                                        11,
-                                       QTableWidgetItem(update_profile_table_data['result']['goLoginId']))
+                                       result_item_in_project_table)
         else:
-            self.profile_table.setItem(update_profile_table_data['profile_table_row_index'],
+            result_item_in_project_table = QTableWidgetItem(update_profile_table_data_error)
+            result_item_in_project_table.setForeground(QColor("red"))
+            self.profile_table.setItem(update_profile_table_data.get("data").get('profile_table_row_index'),
                                        11,
-                                       QTableWidgetItem(update_profile_table_data['result']['error']))
+                                       result_item_in_project_table)
+
+    def update_result_cell_profile_table(self, result_dict):
+        result_dict_error = result_dict.get("error")
+        result_dict_message = result_dict.get("message")
+        result_dict_profile_table_row_index = result_dict.get("profile_table_row_index")
+
+        result_item_in_project_table = QTableWidgetItem(result_dict_message)
+        if result_dict_error:
+            result_item_in_project_table.setForeground(QColor("red"))
+        else:
+            result_item_in_project_table.setForeground(QColor("green"))
+
+        self.profile_table.setItem(result_dict_profile_table_row_index, 11, result_item_in_project_table)
+        stt_number = self.profile_table.item(result_dict_profile_table_row_index, 1).text()
+        try:
+            self.serviceSpreadSheet.values().update(
+                spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                range=f"Tools!K{stt_number}",
+                valueInputOption='RAW',
+                body={'values': [[result_dict_message]]}
+            ).execute()
+        except Exception as e:
+            result_item_in_project_table.setText(
+                f'Có lỗi xảy ra khi update Google Sheet với nội dung {result_dict_message}, lỗi: {str(e)}')
+            result_item_in_project_table.setForeground(QColor("red"))
+            self.profile_table.setItem(result_dict_profile_table_row_index, 11, result_item_in_project_table)
 
     def create_creds_google(self):
         # The file token.json stores the user's access and refresh tokens, and is
@@ -806,10 +1045,12 @@ class MainWindow(QMainWindow):
     def continue_gologin_apply_in_driver(self, profile_table_row_index):
         driver = self.gologin_profile_selenium_drivers[profile_table_row_index]
         random_create_profile_id = generate_random_string(5)
-        self.gologin_continue_create_profile_threads[random_create_profile_id] = (
-            GoLoginContinueCreateProfileThread((profile_table_row_index, driver, {
-                "email|password": self.profile_table.item(profile_table_row_index, 7).text(),
-            })))
+        go_login_continue_create_profile_thread = GoLoginContinueCreateProfileThread((profile_table_row_index, driver, {
+            "email|password": self.profile_table.item(profile_table_row_index, 7).text(),
+        }))
+        (go_login_continue_create_profile_thread.go_login_continue_create_profile_update_result_signal
+         .connect(self.update_result_cell_profile_table))
+        self.gologin_continue_create_profile_threads[random_create_profile_id] = go_login_continue_create_profile_thread
         self.gologin_continue_create_profile_threads[random_create_profile_id].start()
 
     def connect_gologin(self):
