@@ -497,42 +497,58 @@ class GoLoginContinueCreateProfileThread(QThread):
                     attributes1_element.click()
                     time.sleep(2)
 
-                    # Trong element select có name attributes[2].stringValue, chọn option random trong 3 option cuối
-                    attributes2_element = driver.find_element(By.CSS_SELECTOR,
-                                                              "select[name='attributes[2].stringValue']")
+                    attributes2_element = driver.find_element(
+                        By.CSS_SELECTOR, "select[name='attributes[2].stringValue']"
+                    )
                     options2 = attributes2_element.find_elements(By.TAG_NAME, "option")
-                    random_option_index2 = random.randint(len(options2) - 3, len(options2) - 1)
-                    options2[random_option_index2].click()
+                    options2[random.choice([1, 2])].click()
+
+                    time.sleep(2)
+
+                    attributes3_element = driver.find_element(
+                        By.CSS_SELECTOR, "select[name='attributes[3].stringValue']"
+                    )
+                    options3 = attributes3_element.find_elements(By.TAG_NAME, "option")
+                    for option3 in options3:
+                        if option3.text == "iOS":
+                            option3.click()
+
+                    # Trong element select có name attributes[2].stringValue, chọn option random trong 3 option cuối
+                    attributes4_element = driver.find_element(By.CSS_SELECTOR,
+                                                              "select[name='attributes[4].stringValue']")
+                    options4 = attributes4_element.find_elements(By.TAG_NAME, "option")
+                    random_option_index4 = random.randint(len(options4) - 3, len(options4) - 1)
+                    options4[random_option_index4].click()
 
                     time.sleep(2)
 
                     # Trong element select có name attributes[3].stringValue, chọn option random trong 6 option cuối
-                    attributes3_element = driver.find_element(By.CSS_SELECTOR,
-                                                              "select[name='attributes[3].stringValue']")
-                    options3 = attributes3_element.find_elements(By.TAG_NAME, "option")
-                    random_option_index3 = random.randint(len(options3) - 6, len(options3) - 1)
-                    options3[random_option_index3].click()
+                    attributes5_element = driver.find_element(By.CSS_SELECTOR,
+                                                              "select[name='attributes[5].stringValue']")
+                    options5 = attributes5_element.find_elements(By.TAG_NAME, "option")
+                    random_option_index5 = random.randint(len(options5) - 6, len(options5) - 1)
+                    options5[random_option_index5].click()
 
                     time.sleep(2)
 
                     # Click vào element có name attributes[4].stringValue, value = true
-                    attributes4_element = driver.find_element(
-                        By.CSS_SELECTOR, "input[name='attributes[4].stringValue'][value='true']")
-                    attributes4_element.click()
+                    attributes6_element = driver.find_element(
+                        By.CSS_SELECTOR, "input[name='attributes[6].stringValue'][value='true']")
+                    attributes6_element.click()
 
                     time.sleep(2)
 
                     # Click vào element có name attributes[5].stringValue, value = true
-                    attributes5_element = driver.find_element(
-                        By.CSS_SELECTOR, "input[name='attributes[5].stringValue'][value='true']")
-                    attributes5_element.click()
+                    attributes7_element = driver.find_element(
+                        By.CSS_SELECTOR, "input[name='attributes[7].stringValue'][value='true']")
+                    attributes7_element.click()
 
                     time.sleep(2)
 
                     # Click vào element có name attributes[6].stringValue, value = true
-                    attributes6_element = driver.find_element(
-                        By.CSS_SELECTOR, "input[name='attributes[6].stringValue'][value='true']")
-                    attributes6_element.click()
+                    attributes8_element = driver.find_element(
+                        By.CSS_SELECTOR, "input[name='attributes[8].stringValue'][value='true']")
+                    attributes8_element.click()
                     time.sleep(2)
 
                     # Nhập vào element có name attributes[7].stringValue random 1 trong các giá trị được cung cấp
@@ -543,30 +559,30 @@ class GoLoginContinueCreateProfileThread(QThread):
                         "Fancy Hands", "Fancyhires"
                     ]
                     random_value = random.choice(values_list)
-                    attributes7_element = driver.find_element(By.CSS_SELECTOR,
-                                                              "input[name='attributes[7].stringValue']")
+                    attributes9_element = driver.find_element(By.CSS_SELECTOR,
+                                                              "input[name='attributes[9].stringValue']")
                     for char in random_value:
-                        attributes7_element.send_keys(char)
+                        attributes9_element.send_keys(char)
                         time.sleep(random.uniform(0, 0.5))
                     time.sleep(2)
 
                     # Trong element select có name attributes[8].stringValue, chọn option 5+
-                    attributes8_element = driver.find_element(By.CSS_SELECTOR,
-                                                              "select[name='attributes[8].stringValue']")
-                    options8 = attributes8_element.find_elements(By.TAG_NAME, "option")
-                    options8[-1].click()
+                    attributes10_element = driver.find_element(By.CSS_SELECTOR,
+                                                               "select[name='attributes[10].stringValue']")
+                    options10 = attributes10_element.find_elements(By.TAG_NAME, "option")
+                    options10[-1].click()
                     time.sleep(2)
 
                     # Click vào element có name attributes[9].stringValue, value = true
-                    attributes9_element = driver.find_element(
-                        By.CSS_SELECTOR, "input[name='attributes[9].stringValue'][value='true']")
-                    attributes9_element.click()
+                    attributes11_element = driver.find_element(
+                        By.CSS_SELECTOR, "input[name='attributes[11].stringValue'][value='true']")
+                    attributes11_element.click()
                     time.sleep(2)
 
                     # Click vào element có name attributes[10].stringValue, value = true
-                    attributes10_element = driver.find_element(
-                        By.CSS_SELECTOR, "input[name='attributes[10].stringValue'][value='true']")
-                    attributes10_element.click()
+                    attributes12_element = driver.find_element(
+                        By.CSS_SELECTOR, "input[name='attributes[12].stringValue'][value='true']")
+                    attributes12_element.click()
                     time.sleep(2)
 
                     # Click vào input có id = "save"
@@ -675,7 +691,21 @@ class GoLoginContinueCreateProfileThread(QThread):
                             Nếu check thay nut OK, Apply xong, 
                             danh dau la Done va update Apply thanh cong tren Google Sheet
                             """
-                            print("Error:", e)
+                            process_status_header_element = driver.find_element(By.XPATH, "//span[text()='Process "
+                                                                                          "Status']")
+                            if process_status_header_element is not None:
+                                self.go_login_continue_create_profile_update_result_signal.emit({
+                                    "error": None,
+                                    "message": f"Apply thành công",
+                                    "profile_table_row_index": profile_table_row_index
+                                })
+                                # self.serviceSpreadSheet.values().update(
+                                #     spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                                #     range=f"Tools!K{self.profile_table.item(profile_table_row_index, 1).text()}",
+                                #     valueInputOption='RAW',
+                                #     body={'values': [["Apply thành công!"]]}
+                                # ).execute()
+
                             break
                 else:
                     self.go_login_continue_create_profile_update_result_signal.emit({
@@ -779,6 +809,8 @@ class MainWindow(QMainWindow):
                 real_proxy_ip = None
                 raw_proxy_splited = raw_proxy.split(':')
 
+                # TODO
+                # Update result in profile table: Checking IP
                 if len(raw_proxy_splited) == 2:
                     proxy_ip = f'http://{raw_proxy_splited[0]}:{raw_proxy_splited[1]}'
                     real_proxy_ip = get_real_proxy_ip(proxy_ip)
@@ -792,7 +824,7 @@ class MainWindow(QMainWindow):
                     self.profile_table.setItem(profile_table_row_index, 3, QTableWidgetItem(real_proxy_ip))
                     result = self.serviceSpreadSheet.values().get(
                         spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
-                        range="IP!B3:B"
+                        range="IP!D3:D"
                     ).execute()
 
                     b_column_ip_sheet_values = result.get('values', [])
@@ -813,7 +845,7 @@ class MainWindow(QMainWindow):
                                         "valueInputOption": "RAW",
                                         "data": [
                                             {
-                                                "range": f"IP!C{cell_row_index}",
+                                                "range": f"IP!E{cell_row_index}",
                                                 "values": [[real_proxy_ip]]
                                             },
                                             {
@@ -824,7 +856,8 @@ class MainWindow(QMainWindow):
                                     }
                                 ).execute()
                                 request = self.serviceSpreadSheet.get(
-                                    spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE", ranges=f"IP!C{cell_row_index}",
+                                    spreadsheetId="1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE",
+                                    ranges=f"IP!E{cell_row_index}",
                                     includeGridData=True
                                 )
                                 response = request.execute()
