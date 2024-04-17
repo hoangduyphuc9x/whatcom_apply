@@ -1,4 +1,3 @@
-import asyncio
 import os.path
 import sys
 import time
@@ -28,8 +27,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 import string
 import re
-
-# import concurrent.futures
+import concurrent.futures
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 WC_WEEKEND_TEAM_SHEET_ID = "1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE"
@@ -145,6 +143,13 @@ SEE_COMPANY_LIST = ["Lionbridge", "Leapforce", "iSoftStone", "Clickworker", "Cro
                     "Amazon Mechanical Turk (MTurk)", "OneSpace", "Upwork", "Rev", "Spare5",
                     "Scribie", "UTest", "Testbirds", "Test IO", "TranscribeMe", "Crossover",
                     "Fancy Hands", "Fancyhires"]
+proxy_detect_patterns = [
+    r'(?P<scheme>\w+)://(?:(?P<username>\w+):(?P<password>\w+)@)?(?P<host>[\w\.-]+)(?::(?P<port>\d+))?',
+    r'(?:(?P<username>\w+):(?P<password>\w+)@)?(?P<host>[\w\.-]+)(?::(?P<port>\d+))?',
+    r'(?P<scheme>\w+)://(?P<host>[\w\.-]+)(?::(?P<port>\d+))?',
+    r'(?P<host>[\w\.-]+)(?::(?P<port>\d+))?',
+    r'\[(?P<host>[\w:]+)\](?::(?P<port>\d+))?',
+]
 
 if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
     TOOLS_SHEET_NAME = f"{TOOLS_SHEET_NAME}_debug"
@@ -177,15 +182,13 @@ except Exception as e:
                     discoveryServiceUrl='https://sheets.googleapis.com/$discovery/rest?version=v4')
 serviceSpreadSheet = service.spreadsheets()
 
-original_print = print
 
-
-# Define your custom print function
-def print(*args, **kwargs):
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    args = list(args)  # Convert args tuple to list so we can modify it
-    args.append(f"- {current_time}")  # Append current time to arguments
-    original_print(*args, **kwargs)  # Call the original print function with modified arguments
+def extract_proxy_info(proxy_str):
+    for pattern in proxy_detect_patterns:
+        match = re.match(pattern, proxy_str)
+        if match:
+            return match.groupdict()
+    return None
 
 
 def create_gologin_profile(gologin_profile_options: dict) -> dict:
@@ -257,13 +260,32 @@ Note
         get_gologin_fingerprint_result_error = get_gologin_fingerprint_result.get("error")
         if not get_gologin_fingerprint_result_error:
             get_gologin_fingerprint_result_data = get_gologin_fingerprint_result.get("data")
-            proxy_info = {
-                "mode": gologin_profile_proxy.get("scheme"),
-                "host": gologin_profile_proxy.get("host"),
-                "port": gologin_profile_proxy.get("port"),
-                "username": gologin_profile_proxy.get("username"),
-                "password": gologin_profile_proxy.get("password")
-            }
+            gologin_profile_proxy_splited = gologin_profile_proxy.split(":")
+            proxy_info = {}
+            if len(gologin_profile_proxy_splited) == 0:
+                proxy_info = {
+                    "mode": "none",
+                    "host": '',
+                    "port": '',
+                    "username": '',
+                    "password": ''
+                }
+            elif len(gologin_profile_proxy_splited) == 2:
+                proxy_info = {
+                    "mode": "http",
+                    "host": gologin_profile_proxy_splited[0],
+                    "port": int(gologin_profile_proxy_splited[1]),
+                    "username": '',
+                    "password": ''
+                }
+            elif len(gologin_profile_proxy_splited) == 4:
+                proxy_info = {
+                    "mode": "http",
+                    "host": gologin_profile_proxy_splited[0],
+                    "port": int(gologin_profile_proxy_splited[1]),
+                    "username": gologin_profile_proxy_splited[2],
+                    "password": gologin_profile_proxy_splited[3]
+                }
             data = {
                 "name": gologin_profile_name,
                 "notes": "",
@@ -556,31 +578,6 @@ def generate_random_string(length):
     return ''.join(random.choice(characters) for _ in range(length))
 
 
-def extract_proxy(proxy):
-    pattern = r'^(?P<scheme>\w+)://(?:([^:/@]+):([^:/@]+)@)?(?P<host>[^:/@]+):(?P<port>\d+)$'
-
-    match = re.match(pattern, proxy)
-    if match:
-        scheme = match.group('scheme')
-        username = match.group(2)
-        password = match.group(3)
-        if not username:
-            username = None
-        if not password:
-            password = None
-        proxy_info = {
-            'scheme': scheme,
-            'host': match.group('host'),
-            'port': int(match.group('port')),
-            'username': username,
-            'password': password
-        }
-        return proxy_info
-    else:
-        # print(f'None: {proxy}')  # In ra các proxy không trích xuất được
-        return None
-
-
 def get_real_proxy_ip(proxy_ip, max_retries=3, retry_delay=1):
     """
     Get the real IP address for a proxy.
@@ -606,22 +603,26 @@ def get_real_proxy_ip(proxy_ip, max_retries=3, retry_delay=1):
     return None
 
 
-def get_ip_of_raw_proxy(proxy_extract):
-    scheme = proxy_extract.get('scheme', 'http')
-    username = proxy_extract.get('username', None)
-    password = proxy_extract.get('password', None)
-    host = proxy_extract.get('host', None)
-    port = proxy_extract.get('port', None)
+def get_ip_of_raw_proxy(raw_proxy):
+    """
+    Get the real IP address of a proxy from its raw representation.
 
-    if username and password:
-        proxy_ip = f'{scheme}://{username}:{password}@{host}:{port}'
-    else:
-        proxy_ip = f'{scheme}://{host}:{port}'
-    return get_real_proxy_ip(proxy_ip)
+    :param raw_proxy: Raw proxy string.
+    :type raw_proxy: str
+    :return: Real IP address of the proxy.
+    :rtype: str or None
+    """
+    real_proxy_ip = None
+    proxy_info = raw_proxy.split(':')
 
+    if len(proxy_info) in (2, 4):
+        proxy_ip = f'{proxy_info[0]}:{proxy_info[1]}'
+        if len(proxy_info) == 4:
+            proxy_ip = f'{proxy_info[2]}:{proxy_info[3]}@{proxy_ip}'
+        proxy_ip = f'http://{proxy_ip}'
+        real_proxy_ip = get_real_proxy_ip(proxy_ip)
 
-def contains_any(raw, substrings):
-    return any(sub in raw for sub in substrings)
+    return real_proxy_ip
 
 
 # END UTILITY
@@ -705,6 +706,39 @@ def reconnect_driver_to_debug_address(driver, debug_address: str):
     pass
 
 
+def find_element_with_timeout(driver, timeout, by, value, condition):
+    """
+    Tìm một phần tử trong tối đa 'timeout' giây với điều kiện nhất định.
+
+    Args:
+    - driver: WebDriver object của Selenium.
+    - timeout: Thời gian chờ tối đa (giây).
+    - by: Phương pháp tìm kiếm (ví dụ: By.ID, By.CLASS_NAME, By.XPATH,...).
+    - value: Giá trị để tìm kiếm (ví dụ: id, class name, xpath,...).
+    - condition: Điều kiện tìm kiếm (ví dụ: ec.presence_of_element_located, ec.visibility_of_element_located,...).
+
+    Returns:
+    - WebElement object nếu tìm thấy phần tử, None nếu không tìm thấy.
+    """
+    element = None
+    try:
+        element = WebDriverWait(driver, timeout).until(condition((by, value)))
+    except TimeoutException:
+        pass
+    return element
+
+
+def wait_url_contains_any(driver, target_str_list, timeout=60):
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda driver: any(target_str in driver.current_url for target_str in target_str_list)
+        )
+        return True  # Trả về True nếu URL chứa bất kỳ chuỗi nào trong danh sách mục tiêu
+    except TimeoutException:
+        print(f"Timeout: URL did not contain any of the target strings within {timeout} seconds.")
+        return False  # Trả về False nếu timeout xảy ra
+
+
 def setup_selenium_driver(debugger_address: str, chrome_driver_path: str) -> webdriver.Chrome:
     """
     Set up a Selenium WebDriver with specific configurations.
@@ -764,7 +798,7 @@ class GoLoginProfileCreateThread(QThread):
             create_gologin_profile_result = create_gologin_profile({
                 'goLoginToken': profile_table_gologin_data.get("goLoginToken"),
                 'name': profile_table_gologin_data.get("name"),
-                'os': profile_table_gologin_data.get("os"),
+                'os': 'mac',
                 'proxy': profile_table_gologin_data.get("proxy"),
             })
             create_gologin_profile_result_error = create_gologin_profile_result.get("error")
@@ -772,7 +806,6 @@ class GoLoginProfileCreateThread(QThread):
                 self.gologin_profile_created_signal.emit({
                     "error": create_gologin_profile_result_error,
                     "created_gologin_id": None,
-                    "created_gologin_name": None,
                     "profile_table_row_index": profile_table_row_index
                 })
                 self.gologin_profile_created_update_result_signal.emit({
@@ -785,7 +818,6 @@ class GoLoginProfileCreateThread(QThread):
                 self.gologin_profile_created_signal.emit({
                     "error": None,
                     "created_gologin_id": created_gologin_id,
-                    "created_gologin_name": profile_table_gologin_data.get("name"),
                     "profile_table_row_index": profile_table_row_index
                 })
                 self.gologin_profile_created_update_result_signal.emit({
@@ -821,7 +853,6 @@ class GoLoginProfileCreateThread(QThread):
             })
             self.gologin_profile_created_signal.emit({
                 "error": str(error),
-                "created_gologin_name": None,
                 "profile_table_row_index": profile_table_row_index,
                 "created_gologin_id": None
             })
@@ -829,41 +860,6 @@ class GoLoginProfileCreateThread(QThread):
 
 class GoLoginDriverHandleThread(QThread):
     go_login_continue_create_profile_update_result_signal = Signal(dict)
-
-    async def find_element_with_timeout(self, timeout, by, value, condition):
-        loop = asyncio.get_event_loop()
-        try:
-            element = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: WebDriverWait(self.driver, timeout).until(condition((by, value)))),
-                timeout)
-        except (TimeoutError, TimeoutException) as error:
-            print('find_element_with_timeout error', error)
-            element = None
-        return element
-
-    async def wait_until_page_loads(self, timeout):
-        loop = asyncio.get_event_loop()
-        try:
-            await asyncio.wait_for(
-                loop.run_in_executor(None,
-                                     lambda: WebDriverWait(self.driver, timeout)
-                                     .until(lambda d: d.execute_script("return document.readyState") == "complete")),
-                timeout)
-            return True
-        except (TimeoutError, TimeoutException) as error:
-            print('wait_until_page_loads error', error)
-            return None
-
-    async def wait_url_contains_any(self, target_str_list, timeout=60):
-        loop = asyncio.get_event_loop()
-        try:
-            await asyncio.wait_for(loop.run_in_executor(None, lambda: WebDriverWait(self.driver, timeout).until(
-                lambda driver_lambda: any(target_str in driver_lambda.current_url for target_str in target_str_list)
-            )), timeout)
-            return True  # Trả về True nếu URL chứa bất kỳ chuỗi nào trong danh sách mục tiêu
-        except (TimeoutError, TimeoutException) as error:
-            print(f"Timeout: URL did not contain any of the target strings within {timeout} seconds.", error)
-            return False  # Trả về False nếu timeout xảy ra
 
     def __init__(self, gologin_continue_create_profile_data, parent=None):
         super().__init__(parent)
@@ -876,470 +872,468 @@ class GoLoginDriverHandleThread(QThread):
         })
 
     def run(self):
-        loop = asyncio.new_event_loop()  # Create a new event loop
-        asyncio.set_event_loop(loop)  # Set it as the current event loop
-
-        # Your asyncio logic goes here
-        loop.run_until_complete(self.async_task())
-
-    async def check_if_current_is_finding_whatcom_job(self):
-        print('check_if_current_is_finding_whatcom_job')
-        whatcom_element = await self.find_element_with_timeout(30, By.XPATH, "//h4[text()='Whatcom']",
-                                                               ec.presence_of_element_located)
-
-        if whatcom_element:
-            return "FINDING_WHATCOM_JOB"
-        return None
-
-    async def check_if_current_is_apply_whatcom_job(self):
-        print('check_if_current_is_apply_whatcom_job')
-        apply_button = await self.find_element_with_timeout(30, By.XPATH, "//button/div[text()='Apply']",
-                                                            ec.presence_of_element_located)
-        if apply_button:
-            return "APPLYING_WHATCOM_JOB"
-        return None
-
-    async def check_if_current_is_intelligent_attributes(self):
-        print('check_if_current_is_intelligent_attributes')
-        if contains_any(self.driver.current_url, ["https://connect.appen.com/qrp/core/vendors"
-                                                  "/intelligent_attributes"]):
-            attributes0_element = await self.find_element_with_timeout(30, By.ID, "attributes0",
-                                                                       ec.presence_of_element_located)
-            if attributes0_element:
-                return "INTELLIGENT_ATTRIBUTES"
-        return None
-
-    async def check_if_current_is_exam(self):
-        print('check_if_current_is_exam')
-        if contains_any(self.driver.current_url, [
-            "https://connect.appen.com/qrp/core/vendors"
-            "/language_certification_quiz/view"]):
-            audio_element = await self.find_element_with_timeout(30, By.XPATH,
-                                                                 "//audio[@controls and source[contains(@src, "
-                                                                 "'prompt')]]",
-                                                                 ec.presence_of_element_located)
-            if audio_element:
-                return "EXAM"
-        return None
-
-    async def check_if_current_is_esign(self):
-        print('check_if_current_is_esign')
-        if contains_any(self.driver.current_url, ["https://connect.appen.com/qrp/core/vendors/esign/view"
-                                                  "/microsoft_vendor_code_of_conduct/",
-                                                  "https://connect.appen.com/qrp/core/vendors/esign/view"
-                                                  "/microsoft_nda/",
-                                                  "https://connect.appen.com/qrp/core/vendors/esign/view"
-                                                  "/uhrs_judge_data_consent_2023"]):
-            checkbox_agree_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                          "input[id='checkboxAgree'][value='true']",
-                                                                          ec.element_to_be_clickable)
-            sign_input_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                      "input[name='sign']",
-                                                                      ec.element_to_be_clickable)
-            if checkbox_agree_element is not None and sign_input_element is not None:
-                return "ESIGN"
-        return None
-
-    async def check_if_current_is_done(self):
-        print("checking_if_current_is_done")
-        process_status_header_element = await self.find_element_with_timeout(30, By.XPATH,
-                                                                             "//span[text()='Process Status']",
-                                                                             ec.presence_of_element_located)
-        if process_status_header_element is not None:
-            return "DONE"
-        return None
-
-    async def do_intelligent_attributes(self):
-        username_hotmail = self.whatcom_info["email|password"].split("|")[0]
-        password_hotmail = self.whatcom_info["email|password"].split("|")[1]
-
-        # Lấy element có ID attributes0, nhập giá trị vào
-        attributes0_element = await self.find_element_with_timeout(30, By.ID, "attributes0",
-                                                                   ec.presence_of_element_located)
-        if attributes0_element:
-            for character in username_hotmail:
-                attributes0_element.send_keys(character)
-                await asyncio.sleep(random.uniform(0, 0.5))
-        else:
-            self.update_result_to_profile_table(
-                {"error": True, "message": f"Không tìm thấy attributes0_element"})
-            return
-
-        attributes0_button_element = await self.find_element_with_timeout(30, By.ID, "attributes0_button",
-                                                                          ec.element_to_be_clickable)
-        if attributes0_button_element:
-            attributes0_button_element.click()
-        else:
-            self.update_result_to_profile_table(
-                {"error": True, "message": f"Không tìm thấy attributes0_button_element"})
-            return
-
-        await asyncio.sleep(5)
-
-        ok_button_element = await self.find_element_with_timeout(30, By.XPATH,
-                                                                 "//div[@aria-describedby='email-verification']//button[text()='OK']",
-                                                                 ec.element_to_be_clickable)
-        if ok_button_element:
-            ok_button_element.click()
-        else:
-            self.update_result_to_profile_table({"error": True, "message": f"Không tìm thấy ok_button_element"})
-            return
-
-        code_hotmail = None
-        for _ in range(5):
-            temp_code = get_verification_code(username_hotmail, password_hotmail)
-            if temp_code is not None:
-                code_hotmail = temp_code
-                break
-            else:
-                await asyncio.sleep(5)
-
-        if code_hotmail is not None:
-            verificationCodes0_element = await self.find_element_with_timeout(30, By.ID, "verificationCodes0",
-                                                                              ec.presence_of_element_located)
-            if verificationCodes0_element:
-                for char in str(code_hotmail):
-                    verificationCodes0_element.send_keys(char)
-                    await asyncio.sleep(random.uniform(0, 0.5))
-            else:
-                self.update_result_to_profile_table(
-                    {"error": True, "message": f"Không tìm thấy verificationCodes0_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes1_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "input[name='attributes[1].stringValue'][value='true']",
-                                                                       ec.element_to_be_clickable)
-            if attributes1_element:
-                attributes1_element.click()
-            else:
-                self.update_result_to_profile_table(
-                    {"error": True, "message": f"Không tìm thấy attributes1_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes2_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "select[name='attributes[2].stringValue']",
-                                                                       ec.presence_of_element_located)
-            if attributes2_element:
-                options2 = attributes2_element.find_elements(By.TAG_NAME, "option")
-                options2[random.choice([1, 2])].click()
-            else:
-                self.update_result_to_profile_table(
-                    {"error": True, "message": f"Không tìm thấy attributes2_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            # Tiếp tục các thao tác tiếp theo sau khi B được xử lý
-            # Click vào element có name attributes[1].stringValue, value = true
-            attributes3_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "select[name='attributes[3].stringValue']",
-                                                                       ec.presence_of_element_located)
-            if attributes3_element:
-                options3 = attributes3_element.find_elements(By.TAG_NAME, "option")
-                for option3 in options3:
-                    if option3.text == "iOS":
-                        option3.click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes3_element"})
-                return
-
-            attributes4_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "select[name='attributes[4].stringValue']",
-                                                                       ec.presence_of_element_located)
-            if attributes4_element:
-                options4 = attributes4_element.find_elements(By.TAG_NAME, "option")
-                # random in the last 3 options
-                random_option_index4 = random.randint(len(options4) - 3, len(options4) - 1)
-                options4[random_option_index4].click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes4_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes5_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "select[name='attributes[5].stringValue']",
-                                                                       ec.presence_of_element_located)
-            if attributes5_element:
-                options5 = attributes5_element.find_elements(By.TAG_NAME, "option")
-                random_option_index5 = random.randint(len(options5) - 6, len(options5) - 1)
-                options5[random_option_index5].click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes5_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes6_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "input[name='attributes[6].stringValue']["
-                                                                       "value='true']",
-                                                                       ec.element_to_be_clickable)
-            if attributes6_element:
-                attributes6_element.click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes6_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes7_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "input[name='attributes[7].stringValue'][value='true']",
-                                                                       ec.element_to_be_clickable)
-            if attributes7_element:
-                attributes7_element.click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes7_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes8_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "input[name='attributes[8].stringValue'][value='true']",
-                                                                       ec.element_to_be_clickable)
-            if attributes8_element:
-                attributes8_element.click()
-            else:
-                self.update_result_to_profile_table(
-                    {"error": True, "message": f"Không tìm thấy attributes8_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes9_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                       "input[name='attributes[9].stringValue']",
-                                                                       ec.presence_of_element_located)
-            if attributes9_element:
-                random_see_company = random.choice(SEE_COMPANY_LIST)
-                for char in random_see_company:
-                    attributes9_element.send_keys(char)
-                    await asyncio.sleep(random.uniform(0, 0.5))
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes9_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes10_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                        "select[name='attributes[10].stringValue']",
-                                                                        ec.presence_of_element_located)
-            if attributes10_element:
-                options10 = attributes10_element.find_elements(By.TAG_NAME, "option")
-                options10[-1].click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes10_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes11_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                        "input[name='attributes[11].stringValue'][value='true']",
-                                                                        ec.element_to_be_clickable)
-            if attributes11_element:
-                attributes11_element.click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy attributes11_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            attributes12_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                        "input[name='attributes[12].stringValue']["
-                                                                        "value='true']",
-                                                                        ec.element_to_be_clickable)
-            if attributes12_element:
-                attributes12_element.click()
-            else:
-                self.update_result_to_profile_table(
-                    {"error": True, "message": f"Không tìm thấy attributes12_element"})
-                return
-
-            await asyncio.sleep(2)
-
-            save_button = await self.find_element_with_timeout(30, By.ID, "save", ec.element_to_be_clickable)
-            if save_button:
-                save_button.click()
-            else:
-                self.update_result_to_profile_table({"error": True,
-                                                     "message": f"Không tìm thấy save_button"})
-                return
-        else:
-            self.update_result_to_profile_table({"error": True,
-                                                 "message": f"Không nhận được code Hotmail"})
-            return
-
-    async def do_exam(self):
-        audio_element = await self.find_element_with_timeout(30, By.XPATH,
-                                                             "//audio[@controls and source[contains(@src, 'prompt')]]",
-                                                             ec.presence_of_element_located)
-
-        self.driver.execute_script("arguments[0].play();", audio_element)
-
-        src_value = self.driver.execute_script(
-            "return arguments[0].querySelector('source').getAttribute('src');", audio_element)
-
-        prompt_number = src_value.split("prompt")[1].split(".")[0]
-        await asyncio.sleep(2)
-
-        textarea_element = await self.find_element_with_timeout(30, By.TAG_NAME, "textarea",
-                                                                ec.element_to_be_clickable)
-        if not textarea_element:
-            self.update_result_to_profile_table({"error": True,
-                                                 "message": f"Không tìm thấy textarea_element"})
-            return
-
-        textarea_element.clear()
-        for character in PROMPT_TEXT_MAP[prompt_number]:
-            textarea_element.send_keys(character)
-            await asyncio.sleep(random.uniform(0, 0.5))
-
-        await asyncio.sleep(2)
-
-        submit_button = await self.find_element_with_timeout(30, By.XPATH, "//input[@name='submitResponse']",
-                                                             ec.element_to_be_clickable)
-        if not submit_button:
-            self.update_result_to_profile_table({"error": True,
-                                                 "message": f"Không tìm thấy submit_button"})
-            return
-
-        submit_button.click()
-
-    async def do_esign(self):
-        checkbox_agree_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR,
-                                                                      "input[id='checkboxAgree'][value='true']",
-                                                                      ec.element_to_be_clickable)
-        checkbox_agree_element.click()
-        await asyncio.sleep(2)
-
-        sign_input_element = await self.find_element_with_timeout(30, By.CSS_SELECTOR, "input[name='sign']",
-                                                                  ec.element_to_be_clickable)
-        sign_input_element.click()
-        await asyncio.sleep(2)
-
-    async def do_find_whatcom_job(self):
-        whatcom_element = await self.find_element_with_timeout(30, By.XPATH, "//h4[text()='Whatcom']"
-                                                               , ec.element_to_be_clickable)
-        if whatcom_element:
-            whatcom_element.click()
-            await asyncio.sleep(5)
-
-    async def do_apply_whatcom_job(self):
-        apply_button = await self.find_element_with_timeout(30, By.XPATH, "//button/div[text()='Apply']"
-                                                            , ec.element_to_be_clickable)
-        if apply_button:
-            apply_button.click()
-            await asyncio.sleep(10)
-
-    async def do_done(self):
-        self.update_result_to_profile_table({
-            "error": None,
-            "message": f"Apply thành công"})
-
-    def save_web_and_screenshot_to_local_to_debug(self):
-        debug_dir = "debug"
-        if not os.path.exists(debug_dir):
-            os.makedirs(debug_dir)
-
-        random_file_name = f"{generate_random_string(10)} - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-
-        # Save the page source to a file in the debug folder
-        file_path = os.path.join(debug_dir, f"{random_file_name}.html")
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(self.driver.page_source)
-        screenshot_file_path = os.path.join(debug_dir, f"{random_file_name}.png")
-        self.driver.save_screenshot(screenshot_file_path)
-        debug_info_file_path = os.path.join(debug_dir, f"{random_file_name}.txt")
-        with open(debug_info_file_path, "w", encoding="utf-8") as file:
-            current_driver_url = self.driver.current_url
-            debug_info = f"Current URL: {current_driver_url}"
-            file.write(debug_info)
-
-    async def check_current_driver_state(self):
-        print('wait for page full load before check current driver state')
-        await self.wait_until_page_loads(30)
-        print('check_current_driver_state')
-        list_concurrent_tasks = [
-            asyncio.create_task(self.check_if_current_is_finding_whatcom_job()),
-            asyncio.create_task(self.check_if_current_is_apply_whatcom_job()),
-            asyncio.create_task(self.check_if_current_is_intelligent_attributes()),
-            asyncio.create_task(self.check_if_current_is_exam()),
-            asyncio.create_task(self.check_if_current_is_esign()),
-            asyncio.create_task(self.check_if_current_is_done())
-        ]
-        for concurrent_task in asyncio.as_completed(list_concurrent_tasks):
-            concurrent_task_result = await concurrent_task
-            if concurrent_task_result is not None:
-                for other_concurrent_task in list_concurrent_tasks:
-                    other_concurrent_task.cancel()
-                return concurrent_task_result
-
-        return None
-
-    async def async_task(self):
         try:
-            # self.save_web_and_screenshot_to_local_to_debug()
-            self.update_result_to_profile_table({"error": None,
-                                                 "message": "Đến Available Projects"})
-            self.driver.get("https://contributor.appen.com/available-projects")
-            # self.driver.get(
-            #     "file:///Users/hoangduyphuc/Downloads/test_whatcom_project_local_selenium/Contributor%20Experience.html")
+            # def check_current_driver_state():
+            def check_if_current_is_finding_whatcom_job():
+                print('check_if_current_is_finding_whatcom_job')
+                whatcom_element = find_element_with_timeout(self.driver, 10, By.XPATH, "//h4[text()='Whatcom']",
+                                                            ec.presence_of_element_located)
+                if whatcom_element:
+                    return "FINDING_WHATCOM_JOB"
+                return None
 
-            self.update_result_to_profile_table({"error": None, "message": "Đang tìm trạng thái hiện tại"})
-            current_driver_state = await self.check_current_driver_state()
-            print(f'current_driver_state: {current_driver_state}')
+            def check_if_current_is_apply_whatcom_job():
+                print('check_if_current_is_apply_whatcom_job')
+                apply_button = find_element_with_timeout(self.driver, 10, By.XPATH, "//button/div[text()='Apply']",
+                                                         ec.presence_of_element_located)
+                if apply_button:
+                    return "APPLYING_WHATCOM_JOB"
+                return None
 
-            if current_driver_state == "FINDING_WHATCOM_JOB":
-                self.update_result_to_profile_table(
-                    {"error": None, "message": f'Trạng thái hiện tại: {current_driver_state}'})
-                await self.do_find_whatcom_job()
-                current_driver_state = await self.check_current_driver_state()
+            def check_if_current_is_intelligent_attributes():
+                print('check_if_current_is_intelligent_attributes')
+                if wait_url_contains_any(self.driver,
+                                         ["https://connect.appen.com/qrp/core/vendors/intelligent_attributes"]):
+                    attributes0_element = find_element_with_timeout(self.driver, 10, By.ID, "attributes0",
+                                                                    ec.presence_of_element_located)
+                    if attributes0_element:
+                        return "INTELLIGENT_ATTRIBUTES"
+                return None
 
-                if current_driver_state == "APPLYING_WHATCOM_JOB":
-                    self.update_result_to_profile_table(
-                        {"error": None, "message": f'Trạng thái hiện tại: {current_driver_state}'})
-                    await self.do_apply_whatcom_job()
+            def check_if_current_is_exam():
+                print('check_if_current_is_exam')
+                if wait_url_contains_any(self.driver,
+                                         [
+                                             "https://connect.appen.com/qrp/core/vendors"
+                                             "/language_certification_quiz/view"]):
+                    audio_element = find_element_with_timeout(self.driver, 10, By.XPATH,
+                                                              "//audio[@controls and source[contains(@src, "
+                                                              "'prompt')]]",
+                                                              ec.presence_of_element_located)
+                    if audio_element:
+                        return "EXAM"
+                return None
+
+            def check_if_current_is_esign():
+                print('check_if_current_is_esign')
+                if wait_url_contains_any(self.driver, ["https://connect.appen.com/qrp/core/vendors/esign/view"
+                                                       "/microsoft_vendor_code_of_conduct/",
+                                                       "https://connect.appen.com/qrp/core/vendors/esign/view"
+                                                       "/microsoft_nda/",
+                                                       "https://connect.appen.com/qrp/core/vendors/esign/view"
+                                                       "/uhrs_judge_data_consent_2023"]):
+                    checkbox_agree_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                       "input[id='checkboxAgree'][value='true']",
+                                                                       ec.element_to_be_clickable)
+                    sign_input_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                   "input[name='sign']",
+                                                                   ec.element_to_be_clickable)
+                    if checkbox_agree_element is not None and sign_input_element is not None:
+                        return "ESIGN"
+                return None
+
+            def check_if_current_is_done():
+                print("checking_if_current_is_done")
+                process_status_header_element = find_element_with_timeout(self.driver, 10, By.XPATH,
+                                                                          "//span[text()='Process Status']",
+                                                                          ec.presence_of_element_located)
+                if process_status_header_element is not None:
+                    return "DONE"
+                return None
+
+            def do_intelligent_attributes():
+                username_hotmail = self.whatcom_info["email|password"].split("|")[0]
+                password_hotmail = self.whatcom_info["email|password"].split("|")[1]
+
+                # Lấy element có ID attributes0, nhập giá trị vào
+                attributes0_element = find_element_with_timeout(self.driver, 10, By.ID, "attributes0",
+                                                                ec.presence_of_element_located)
+                if attributes0_element:
+                    for character in username_hotmail:
+                        attributes0_element.send_keys(character)
+                        time.sleep(random.uniform(0, 0.5))
                 else:
                     self.update_result_to_profile_table(
-                        {"error": None, "message": f'Trạng thái hiện tại: {current_driver_state}'})
-                    self.save_web_and_screenshot_to_local_to_debug()
+                        {"error": True, "message": f"Không tìm thấy attributes0_element"})
+                    return
 
-            self.driver.get("https://connect.appen.com/qrp/core/vendors/workflows/view")
-
-            while True:
-                current_driver_state = await self.check_current_driver_state()
-                print(f'current_driver_state: {current_driver_state}')
-                if current_driver_state is not None:
+                # Lấy element có ID attributes0_button, click
+                attributes0_button_element = find_element_with_timeout(self.driver, 10, By.ID, "attributes0_button",
+                                                                       ec.element_to_be_clickable)
+                if attributes0_button_element:
+                    attributes0_button_element.click()
+                else:
                     self.update_result_to_profile_table(
-                        {"error": None, "message": f'Trạng thái hiện tại: {current_driver_state}'})
-                    # if current_driver_state == "FINDING_WHATCOM_JOB":
-                    #     await self.do_find_whatcom_job()
-                    # elif current_driver_state == "APPLYING_WHATCOM_JOB":
-                    #     await self.do_apply_whatcom_job()
-                    if current_driver_state == "INTELLIGENT_ATTRIBUTES":
-                        await self.do_intelligent_attributes()
-                    elif current_driver_state == "EXAM":
-                        await self.do_exam()
-                    elif current_driver_state == "ESIGN":
-                        await self.do_esign()
-                    elif current_driver_state == "DONE":
-                        await self.do_done()
+                        {"error": True, "message": f"Không tìm thấy attributes0_button_element"})
+                    return
+
+                time.sleep(5)
+
+                ok_button_element = find_element_with_timeout(self.driver, 10, By.XPATH,
+                                                              "//div[@aria-describedby='email-verification']//button[text()='OK']",
+                                                              ec.element_to_be_clickable)
+                if ok_button_element:
+                    ok_button_element.click()
+                else:
+                    self.update_result_to_profile_table({"error": True, "message": f"Không tìm thấy ok_button_element"})
+                    return
+
+                code_hotmail = None
+                for _ in range(5):
+                    temp_code = get_verification_code(username_hotmail, password_hotmail)
+                    if temp_code is not None:
+                        code_hotmail = temp_code
                         break
+                    else:
+                        time.sleep(5)
+
+                if code_hotmail is not None:
+                    verificationCodes0_element = find_element_with_timeout(self.driver, 10, By.ID, "verificationCodes0",
+                                                                           ec.presence_of_element_located)
+                    if verificationCodes0_element:
+                        for char in str(code_hotmail):
+                            verificationCodes0_element.send_keys(char)
+                            time.sleep(random.uniform(0, 0.5))
+                    else:
+                        self.update_result_to_profile_table(
+                            {"error": True, "message": f"Không tìm thấy verificationCodes0_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes1_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "input[name='attributes[1].stringValue'][value='true']",
+                                                                    ec.element_to_be_clickable)
+                    if attributes1_element:
+                        attributes1_element.click()
+                    else:
+                        self.update_result_to_profile_table(
+                            {error: True, "message": f"Không tìm thấy attributes1_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes2_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "select[name='attributes[2].stringValue']",
+                                                                    ec.presence_of_element_located)
+                    if attributes2_element:
+                        options2 = attributes2_element.find_elements(By.TAG_NAME, "option")
+                        options2[random.choice([1, 2])].click()
+                    else:
+                        self.update_result_to_profile_table(
+                            {error: True, "message": f"Không tìm thấy attributes2_element"})
+                        return
+
+                    time.sleep(2)
+
+                    # Tiếp tục các thao tác tiếp theo sau khi B được xử lý
+                    # Click vào element có name attributes[1].stringValue, value = true
+                    attributes3_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "select[name='attributes[3].stringValue']",
+                                                                    ec.presence_of_element_located)
+                    if attributes3_element:
+                        options3 = attributes3_element.find_elements(By.TAG_NAME, "option")
+                        for option3 in options3:
+                            if option3.text == "iOS":
+                                option3.click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes3_element"})
+                        return
+
+                    # Tiếp tục các thao tác tiếp theo sau khi B được xử lý
+                    # Trong element select có name attributes[2].stringValue, chọn option random trong 3 option cuối
+                    attributes4_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "select[name='attributes[4].stringValue']",
+                                                                    ec.presence_of_element_located)
+                    if attributes4_element:
+                        options4 = attributes4_element.find_elements(By.TAG_NAME, "option")
+                        random_option_index4 = random.randint(len(options4) - 3, len(options4) - 1)
+                        options4[random_option_index4].click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes4_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes5_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "select[name='attributes[5].stringValue']",
+                                                                    ec.presence_of_element_located)
+                    if attributes5_element:
+                        options5 = attributes5_element.find_elements(By.TAG_NAME, "option")
+                        random_option_index5 = random.randint(len(options5) - 6, len(options5) - 1)
+                        options5[random_option_index5].click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes5_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes6_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "input[name='attributes[6].stringValue']["
+                                                                    "value='true']",
+                                                                    ec.element_to_be_clickable)
+                    if attributes6_element:
+                        attributes6_element.click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes6_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes7_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "input[name='attributes[7].stringValue'][value='true']",
+                                                                    ec.element_to_be_clickable)
+                    if attributes7_element:
+                        attributes7_element.click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes7_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes8_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "input[name='attributes[8].stringValue'][value='true']",
+                                                                    ec.element_to_be_clickable)
+                    if attributes8_element:
+                        attributes8_element.click()
+                    else:
+                        self.update_result_to_profile_table(
+                            {"error": True, "message": f"Không tìm thấy attributes8_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes9_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                    "input[name='attributes[9].stringValue']",
+                                                                    ec.presence_of_element_located)
+                    if attributes9_element:
+                        random_see_company = random.choice(SEE_COMPANY_LIST)
+                        for char in random_see_company:
+                            attributes9_element.send_keys(char)
+                            time.sleep(random.uniform(0, 0.5))
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes9_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes10_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                     "select[name='attributes[10].stringValue']",
+                                                                     ec.presence_of_element_located)
+                    if attributes10_element:
+                        options10 = attributes10_element.find_elements(By.TAG_NAME, "option")
+                        options10[-1].click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes10_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes11_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                     "input[name='attributes[11].stringValue'][value='true']",
+                                                                     ec.element_to_be_clickable)
+                    if attributes11_element:
+                        attributes11_element.click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy attributes11_element"})
+                        return
+
+                    time.sleep(2)
+
+                    attributes12_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                     "input[name='attributes[12].stringValue']["
+                                                                     "value='true']",
+                                                                     ec.element_to_be_clickable)
+                    if attributes12_element:
+                        attributes12_element.click()
+                    else:
+                        self.update_result_to_profile_table(
+                            {"error": True, "message": f"Không tìm thấy attributes12_element"})
+                        return
+
+                    time.sleep(2)
+
+                    save_button = find_element_with_timeout(self.driver, 10, By.ID, "save", ec.element_to_be_clickable)
+                    if save_button:
+                        save_button.click()
+                    else:
+                        self.update_result_to_profile_table({"error": True,
+                                                             "message": f"Không tìm thấy save_button"})
+                        return
                 else:
-                    self.update_result_to_profile_table(
-                        {"error": None, "message": f'Trạng thái hiện tại: Không thuộc các trạng thái đã biết.'})
-                    self.save_web_and_screenshot_to_local_to_debug()
-                    break
+                    self.update_result_to_profile_table({"error": True,
+                                                         "message": f"Không nhận được code Hotmail"})
+                    return
+
+            def do_exam():
+                audio_element = find_element_with_timeout(self.driver, 10, By.XPATH,
+                                                          "//audio[@controls and source[contains(@src, 'prompt')]]",
+                                                          ec.presence_of_element_located)
+
+                self.driver.execute_script("arguments[0].play();", audio_element)
+
+                src_value = self.driver.execute_script(
+                    "return arguments[0].querySelector('source').getAttribute('src');", audio_element)
+
+                prompt_number = src_value.split("prompt")[1].split(".")[0]
+                time.sleep(2)
+
+                textarea_element = find_element_with_timeout(self.driver, 10, By.TAG_NAME, "textarea",
+                                                             ec.element_to_be_clickable)
+                if not textarea_element:
+                    self.update_result_to_profile_table({"error": True,
+                                                         "message": f"Không tìm thấy textarea_element"})
+                    return
+
+                textarea_element.clear()
+                for character in PROMPT_TEXT_MAP[prompt_number]:
+                    textarea_element.send_keys(character)
+                    time.sleep(random.uniform(0, 0.5))
+
+                time.sleep(2)
+
+                # Click vào button submitresponse
+                submit_button = find_element_with_timeout(self.driver, 10, By.XPATH, "//input[@name='submitResponse']",
+                                                          ec.element_to_be_clickable)
+                if not submit_button:
+                    self.update_result_to_profile_table({"error": True,
+                                                         "message": f"Không tìm thấy submit_button"})
+                    return
+
+                submit_button.click()
+
+            def do_esign():
+                checkbox_agree_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR,
+                                                                   "input[id='checkboxAgree'][value='true']",
+                                                                   ec.element_to_be_clickable)
+                checkbox_agree_element.click()
+                time.sleep(2)
+
+                sign_input_element = find_element_with_timeout(self.driver, 10, By.CSS_SELECTOR, "input[name='sign']",
+                                                               ec.element_to_be_clickable)
+                sign_input_element.click()
+                time.sleep(2)
+
+            def do_find_whatcom_job():
+                whatcom_element = find_element_with_timeout(self.driver, 10, By.XPATH, "//h4[text()='Whatcom']"
+                                                            , ec.element_to_be_clickable)
+                if whatcom_element:
+                    whatcom_element.click()
+
+            def do_apply_whatcom_job():
+                apply_button = find_element_with_timeout(self.driver, 10, By.XPATH, "//button/div[text()='Apply']"
+                                                         , ec.element_to_be_clickable)
+                if apply_button:
+                    apply_button.click()
+                    time.sleep(10)
+                    self.driver.get("https://connect.appen.com/qrp/core/vendors/workflows/view")
+
+            def do_done():
+                self.update_result_to_profile_table({
+                    "error": None,
+                    "message": f"Apply thành công"})
+
+            self.update_result_to_profile_table({"error": None,
+                                                 "message": "Đang tìm Job Whatcom"})
+            # self.driver.get("https://contributor.appen.com/available-projects")
+            self.driver.get("file:///Users/hoangduyphuc/Downloads/test_whatcom_project_local_selenium/Contributor"
+                            "%20Experience.html")
+            # while True:
+            self.update_result_to_profile_table({"error": None,
+                                                 "message": "Đang tìm trạng thái hiện tại"})
+
+            def check_current_state():
+                print('check_current_state')
+
+                # Khởi tạo danh sách các hàm kiểm tra
+                check_functions = [
+                    check_if_current_is_finding_whatcom_job,
+                    check_if_current_is_apply_whatcom_job,
+                    check_if_current_is_intelligent_attributes,
+                    check_if_current_is_exam,
+                    check_if_current_is_esign,
+                    check_if_current_is_done
+                ]
+
+                # Sử dụng ThreadPoolExecutor để chạy các hàm kiểm tra song song
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    # Bắt đầu các hàm kiểm tra và thu thập kết quả
+                    results = executor.map(lambda f: f(), check_functions)
+
+                # Trả về kết quả đầu tiên khác None
+                # for future in concurrent.futures.as_completed(results):
+
+                for result in concurrent.futures.as_completed(results):
+                    print(f'check_current_state: {result.result()}')
+                    if result is not None:
+                        print(f'check_current_state: {result}, time: {datetime.datetime.now()}')
+                        return result
+
+                return None
+
+            current_state = check_current_state()
+            if current_state is not None:
+                time.sleep(10)
+                check_current_state()
+            else:
+                print("None detect!")
+
+
+            # def checking():
+            #     print('checking...')
+            #     with concurrent.futures.ThreadPoolExecutor() as executor:
+            #         tasks = [
+            #             executor.submit(check_if_current_is_finding_whatcom_job),
+            #             executor.submit(check_if_current_is_apply_whatcom_job),
+            #             executor.submit(check_if_current_is_intelligent_attributes),
+            #             executor.submit(check_if_current_is_exam),
+            #             executor.submit(check_if_current_is_esign),
+            #             executor.submit(check_if_current_is_done),
+            #         ]
+            #         for future in concurrent.futures.as_completed(tasks):
+            #             result = future.result()
+            #             if result is not None:
+            #                 print(f'result = {result}, time: {datetime.datetime.now()}')
+            #                 self.update_result_to_profile_table({"error": None, "message": f"Trạng thái hiện tại: {result}"})
+            #                 executor.shutdown(wait=False)
+            #                 # Gọi lại hàm checking() để tiếp tục kiểm tra
+            #                 time.sleep(10)
+            #                 return checking()
+            #         self.update_result_to_profile_table({"error": None, "message": f"Trạng thái hiện tại: None"})
+            #
+            # checking()
+
+            # print(f'done with, time: {datetime.datetime.now()}')
+
+            # current_state = check_current_driver_state()
+            # if current_state is not None:
+            #     self.update_result_to_profile_table({"error": None,
+            #                                          "message": f"Trạng thái hiện tại: {current_state}"})
+            #     if current_state == "FINDING_WHATCOM_JOB":
+            #         do_find_whatcom_job()
+            #     elif current_state == "APPLYING_WHATCOM_JOB":
+            #         do_apply_whatcom_job()
+            #     elif current_state == "INTELLIGENT_ATTRIBUTES":
+            #         do_intelligent_attributes()
+            #     elif current_state == "EXAM":
+            #         do_exam()
+            #     elif current_state == "ESIGN":
+            #         do_esign()
+            #     elif current_state == "DONE":
+            #         do_done()
+            #         break
+            # else:
+            #     self.update_result_to_profile_table({"error": None,
+            #                                          "message": f"Trạng thái hiện tại: None"})
+            #     break
 
         except Exception as error:
             self.update_result_to_profile_table({"error": True,
@@ -1381,7 +1375,9 @@ class MainWindow(QMainWindow):
         self.gologin_api_key_input = QLineEdit()
         self.gologin_api_key_input.setPlaceholderText("API Key")
         self.gologin_api_key_input.setText(
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjE5YzM5M2FjNTQ4MDcyODZmZTUyMGUiLCJ0eXBlIjoiZGV2Iiwiand0aWQiOiI2NjE5YzNhNWNlYmQwODIxZDY2ZGJlZWYifQ.UrBemMOjHHOA6j_8uwFKB2J9avzpKZ5Xt0UH_DVPnoA")
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+            ".eyJzdWIiOiI2NjA2YmRiM2QxM2QyZDE5ZGNjNjkwNjgiLCJ0eXBlIjoiZGV2Iiwiand0aWQiOiI2NjA2YmRjYzEwZTU3ZWUwZjZmOTlhNDUifQ"
+            ".v-vaL0-O62BmR4LGxHNzn30UncvxzUdRRanM-FpmZiU")
 
         load_gologin_profiles_button = QPushButton("Load Gologin Profiles")
         load_gologin_profiles_button.clicked.connect(self.load_gologin_profiles)
@@ -1433,21 +1429,39 @@ class MainWindow(QMainWindow):
             gologin_profile_create_thread.start()
 
     def process_profile(self, profile_table_row_index):
-        # TODO
-        """
-        Nếu gologin profile selected id khong bang 0 thi chi can bat GoloGin profile co san len hay khoi dong 1 tien trình setup mới, với IP mới, check trùng IP,...?
-        :param profile_table_row_index:
-        :return:
-        """
         raw_proxy = self.profile_table.item(profile_table_row_index, self.PROXY_COLUMN_HEADER_INDEX).text()
-        proxy_extract = extract_proxy(raw_proxy)
-        if proxy_extract is None:
-            self.handle_cannot_extract_proxy_from_proxy_raw(profile_table_row_index)
-            return
-        raw_proxy_ip = get_ip_of_raw_proxy(proxy_extract)
+        # raw_proxy_after_extract = extract_proxy_info(raw_proxy)
+        # if(raw_proxy_after_extract is not None):
+
+        # handle_proxy_thread = IPHandleInGoogleSheetThread((profile_table_row_index, {
+        #
+        # }))
+        # handle_proxy_thread.start()
+        # gologin_profile_create_thread = GoLoginProfileCreateThread(
+        #     (profile_table_row_index, {
+        #         'goLoginToken': self.gologin_api_key_input.text(),
+        #         'name': f'Windows {self.profile_table.item(profile_table_row_index, self.ACCOUNT_INDEX_COLUMN_HEADER_INDEX).text()}',
+        #         'os': 'win',
+        #         'proxy': raw_proxy,
+        #         'emailAppen': self.profile_table.item(profile_table_row_index,
+        #                                               self.MAIL_APPEN_COLUMN_HEADER_INDEX).text(),
+        #         'passwordAppen': self.profile_table.item(profile_table_row_index,
+        #                                                  self.PASS_APPEN_COLUMN_HEADER_INDEX).text(),
+        #         "email|password": self.profile_table.item(profile_table_row_index,
+        #                                                   self.HOTMAIL_PASS_COLUMN_HEADER_INDEX).text()
+        #     }))
+        # gologin_profile_create_thread.gologin_profile_created_signal.connect(
+        #     self.update_profile_table_after_gologin_profile_created)
+        # (gologin_profile_create_thread.gologin_profile_created_update_result_signal
+        #  .connect(self.update_result_cell_profile_table))
+        #
+        # gologin_profile_create_thread.gologin_profile_driver_created_signal.connect(
+        #     self.update_gologin_profile_drivers)
+        # self.gologin_profile_create_threads.append(gologin_profile_create_thread)
+        raw_proxy_ip = get_ip_of_raw_proxy(raw_proxy)
 
         if not raw_proxy_ip:
-            self.handle_cannot_get_ip_from_proxy_extract(profile_table_row_index)
+            self.handle_invalid_raw_proxy(profile_table_row_index)
             return
 
         self.update_raw_proxy_ip_in_profile_table(profile_table_row_index, raw_proxy_ip)
@@ -1466,7 +1480,7 @@ class MainWindow(QMainWindow):
                 if raw_proxy_ip_is_duplicate:
                     self.handle_duplicate_raw_proxy_ip(profile_table_row_index)
                 else:
-                    self.create_gologin_profile(profile_table_row_index, proxy_extract)
+                    self.create_gologin_profile(profile_table_row_index, raw_proxy)
                 return
 
     def handle_duplicate_raw_proxy_ip(self, profile_table_row_index):
@@ -1480,7 +1494,7 @@ class MainWindow(QMainWindow):
             f"{TOOLS_SHEET_NAME}!C{self.profile_table.item(profile_table_row_index, self.STT_COLUMN_HEADER_INDEX).text()}",
             duplicate_ip_message)
 
-    def handle_cannot_get_ip_from_proxy_extract(self, profile_table_row_index):
+    def handle_invalid_raw_proxy(self, profile_table_row_index):
         invalid_proxy_message = "Không lấy được địa chỉ IP của Proxy. Bỏ qua."
         self.update_result_cell_profile_table({
             "error": True,
@@ -1490,17 +1504,6 @@ class MainWindow(QMainWindow):
         update_google_sheet_cell_by_range(
             f"{TOOLS_SHEET_NAME}!C{self.profile_table.item(profile_table_row_index, self.STT_COLUMN_HEADER_INDEX).text()}",
             invalid_proxy_message)
-
-    def handle_cannot_extract_proxy_from_proxy_raw(self, profile_table_row_index):
-        cannot_extract_proxy_from_proxy_raw_message = "Proxy không đúng định dạng. Bỏ qua."
-        self.update_result_cell_profile_table({
-            "error": True,
-            "message": cannot_extract_proxy_from_proxy_raw_message,
-            "profile_table_row_index": profile_table_row_index
-        })
-        update_google_sheet_cell_by_range(
-            f"{TOOLS_SHEET_NAME}!C{self.profile_table.item(profile_table_row_index, self.STT_COLUMN_HEADER_INDEX).text()}",
-            cannot_extract_proxy_from_proxy_raw_message)
 
     def update_raw_proxy_ip_in_profile_table(self, profile_table_row_index, raw_proxy_ip):
         self.profile_table.setItem(profile_table_row_index, self.IP_COLUMN_HEADER_INDEX,
@@ -1528,13 +1531,13 @@ class MainWindow(QMainWindow):
             ]
         })
 
-    def create_gologin_profile(self, profile_table_row_index, proxy_extract):
+    def create_gologin_profile(self, profile_table_row_index, raw_proxy):
         gologin_profile_create_thread = GoLoginProfileCreateThread(
             (profile_table_row_index, {
                 'goLoginToken': self.gologin_api_key_input.text(),
-                'name': f'Windows {self.profile_table.item(profile_table_row_index, self.ACCOUNT_INDEX_COLUMN_HEADER_INDEX).text()} -  {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+                'name': f'Windows {self.profile_table.item(profile_table_row_index, self.ACCOUNT_INDEX_COLUMN_HEADER_INDEX).text()}',
                 'os': 'win',
-                'proxy': proxy_extract,
+                'proxy': raw_proxy,
                 'emailAppen': self.profile_table.item(profile_table_row_index,
                                                       self.MAIL_APPEN_COLUMN_HEADER_INDEX).text(),
                 'passwordAppen': self.profile_table.item(profile_table_row_index,
@@ -1558,28 +1561,6 @@ class MainWindow(QMainWindow):
 
     # SLOTS
     def update_profile_table_after_gologin_profile_created(self, result_dict: dict):
-        # self.gologin_profile_created_signal.emit({
-        #     "error": create_gologin_profile_result_error,
-        #     "created_gologin_id": None,
-        #     "created_gologin_name": None,
-        #     "profile_table_row_index": profile_table_row_index
-        # })
-        result_dict_error = result_dict.get('error')
-        if result_dict_error:
-            return
-        result_dict_created_gologin_id = result_dict.get('created_gologin_id')
-        result_dict_created_gologin_name = result_dict.get('created_gologin_name')
-        result_dict_profile_table_row_index = result_dict.get('profile_table_row_index')
-
-        gologin_profiles_cell_widget = self.profile_table.cellWidget(result_dict_profile_table_row_index, self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX)
-        gologin_profiles_cell_widget.addItem(result_dict_created_gologin_name, result_dict_created_gologin_id)
-        for index in range(gologin_profiles_cell_widget.count()):
-            value = gologin_profiles_cell_widget.itemData(index)
-            if value == result_dict_created_gologin_id:
-                gologin_profiles_cell_widget.setCurrentIndex(index)
-                break
-
-    def update_result_cell_profile_table(self, result_dict: dict):
         result_dict_error = result_dict.get("error")
         result_dict_message = result_dict.get("message")
         result_dict_profile_table_row_index = result_dict.get("profile_table_row_index")
@@ -1598,6 +1579,29 @@ class MainWindow(QMainWindow):
         except Exception as error:
             result_item_in_project_table.setText(
                 f'Có lỗi xảy ra khi update Google Sheet với nội dung {result_dict_message}, lỗi: {str(error)}')
+            result_item_in_project_table.setForeground(QColor("red"))
+            self.profile_table.setItem(result_dict_profile_table_row_index, self.RESULT_COLUMN_HEADER_INDEX,
+                                       result_item_in_project_table)
+
+    def update_result_cell_profile_table(self, result_dict: dict):
+        result_dict_error = result_dict.get("error")
+        result_dict_message = result_dict.get("message")
+        result_dict_profile_table_row_index = result_dict.get("profile_table_row_index")
+
+        result_item_in_project_table = QTableWidgetItem(result_dict_message)
+        if result_dict_error:
+            result_item_in_project_table.setForeground(QColor("red"))
+        else:
+            result_item_in_project_table.setForeground(QColor("green"))
+
+        self.profile_table.setItem(result_dict_profile_table_row_index, self.RESULT_COLUMN_HEADER_INDEX,
+                                   result_item_in_project_table)
+        stt_number = self.profile_table.item(result_dict_profile_table_row_index, self.STT_COLUMN_HEADER_INDEX).text()
+        try:
+            update_google_sheet_cell_by_range(f"{TOOLS_SHEET_NAME}!K{stt_number}", result_dict_message)
+        except Exception as e:
+            result_item_in_project_table.setText(
+                f'Có lỗi xảy ra khi update Google Sheet với nội dung {result_dict_message}, lỗi: {str(e)}')
             result_item_in_project_table.setForeground(QColor("red"))
             self.profile_table.setItem(result_dict_profile_table_row_index, self.RESULT_COLUMN_HEADER_INDEX,
                                        result_item_in_project_table)
@@ -1666,10 +1670,6 @@ class MainWindow(QMainWindow):
             self.fill_data_to_profile_table(values)
 
     def continue_gologin_apply_in_driver(self, profile_table_row_index):
-        # TODO
-        """
-        driver phải được tham chiếu từ selected gologin profile ID, nếu chưa có thì tự tạo rồi bật lên, không tham chiếu qua profile_table_row_index.
-        """
         driver = self.gologin_profile_selenium_drivers[profile_table_row_index]
         random_create_profile_id = generate_random_string(5)
         go_login_continue_create_profile_thread = GoLoginDriverHandleThread((profile_table_row_index, driver, {
