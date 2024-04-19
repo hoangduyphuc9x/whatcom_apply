@@ -29,7 +29,6 @@ from selenium.webdriver.chrome.service import Service
 import string
 import re
 
-# import concurrent.futures
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 WC_WEEKEND_TEAM_SHEET_ID = "1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE"
@@ -1259,12 +1258,12 @@ class GoLoginDriverHandleThread(QThread):
         random_file_name = f"{generate_random_string(10)} - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
         # Save the page source to a file in the debug folder
-        file_path = os.path.join(debug_dir, f"{random_file_name}.html")
+        file_path = os.path.join(os.getcwd(), debug_dir, f"{random_file_name}.html")
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(self.driver.page_source)
-        screenshot_file_path = os.path.join(debug_dir, f"{random_file_name}.png")
+        screenshot_file_path = os.path.join(os.getcwd(), debug_dir, f"{random_file_name}.png")
         self.driver.save_screenshot(screenshot_file_path)
-        debug_info_file_path = os.path.join(debug_dir, f"{random_file_name}.txt")
+        debug_info_file_path = os.path.join(os.getcwd(), debug_dir, f"{random_file_name}.txt")
         with open(debug_info_file_path, "w", encoding="utf-8") as file:
             current_driver_url = self.driver.current_url
             debug_info = f"Current URL: {current_driver_url}"
