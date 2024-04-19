@@ -704,6 +704,11 @@ def get_gologin_profiles(go_login_token: str):
 def reconnect_driver_to_debug_address(driver, debug_address: str):
     pass
 
+# def create_gologin_selenium_driver_via_id(gologin_api_key, gologin_profile_id):
+#     try:
+#     except:
+#
+#     pass
 
 def setup_selenium_driver(debugger_address: str, chrome_driver_path: str) -> webdriver.Chrome:
     """
@@ -809,7 +814,7 @@ class GoLoginProfileCreateThread(QThread):
                 self.gologin_profile_driver_created_signal.emit({
                     "error": None,
                     "data": {
-                        "profile_table_row_index": profile_table_row_index,
+                        "created_gologin_id": created_gologin_id,
                         "driver_created": driver
                     }
                 })
@@ -1553,7 +1558,7 @@ class MainWindow(QMainWindow):
 
     def update_gologin_profile_drivers(self, driver_gologin_profile_created_data):
         self.gologin_profile_selenium_drivers[
-            driver_gologin_profile_created_data.get('data').get('profile_table_row_index')] = \
+            driver_gologin_profile_created_data.get('data').get('created_gologin_id')] = \
             driver_gologin_profile_created_data.get('data').get('driver_created')
 
     # SLOTS
@@ -1571,7 +1576,8 @@ class MainWindow(QMainWindow):
         result_dict_created_gologin_name = result_dict.get('created_gologin_name')
         result_dict_profile_table_row_index = result_dict.get('profile_table_row_index')
 
-        gologin_profiles_cell_widget = self.profile_table.cellWidget(result_dict_profile_table_row_index, self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX)
+        gologin_profiles_cell_widget = self.profile_table.cellWidget(result_dict_profile_table_row_index,
+                                                                     self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX)
         gologin_profiles_cell_widget.addItem(result_dict_created_gologin_name, result_dict_created_gologin_id)
         for index in range(gologin_profiles_cell_widget.count()):
             value = gologin_profiles_cell_widget.itemData(index)
@@ -1627,7 +1633,7 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(val)
                 self.profile_table.setItem(profile_table_row_index, col, item)
             gologin_profile_select_checkbox = QComboBox()
-            gologin_profile_select_checkbox.addItem("Tạo Profile mới", 0)
+            gologin_profile_select_checkbox.addItem("Tạo Profile mới", "0")
             gologin_profile_select_checkbox.setCurrentIndex(0)
             for gologin_profile in self.gologin_profiles:
                 gologin_profile_select_checkbox.addItem(gologin_profile.get("name"), gologin_profile.get("id"))
@@ -1665,12 +1671,27 @@ class MainWindow(QMainWindow):
             values = get_google_sheet_ranges_values(google_sheet_range)
             self.fill_data_to_profile_table(values)
 
+    def open_driver_via_gologin_id(self):
+
+        pass
+
     def continue_gologin_apply_in_driver(self, profile_table_row_index):
-        # TODO
-        """
-        driver phải được tham chiếu từ selected gologin profile ID, nếu chưa có thì tự tạo rồi bật lên, không tham chiếu qua profile_table_row_index.
-        """
-        driver = self.gologin_profile_selenium_drivers[profile_table_row_index]
+        selected_gologin_profile_id = self.profile_table.cellWidget(profile_table_row_index,
+                                                                 self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX).currentData()
+        if selected_gologin_profile_id == "0":
+            return
+
+        driver = self.gologin_profile_selenium_drivers.get(selected_gologin_profile_id)
+        if driver is None:
+            gl = GoLogin({
+                "token": self.gologin_api_key_input.text().strip(),
+                "profile_id": selected_gologin_profile_id,
+                "port": random.randint(3500, 7000)
+            })
+            chrome_driver_path = "./mac_chromedriver/chromedriver" if platform == "darwin" else "./win_chromedriver/chromedriver.exe"
+            gologin_profile_debugger_address = gl.start()
+            driver = setup_selenium_driver(gologin_profile_debugger_address, chrome_driver_path)
+
         random_create_profile_id = generate_random_string(5)
         go_login_continue_create_profile_thread = GoLoginDriverHandleThread((profile_table_row_index, driver, {
             "email|password": self.profile_table.item(profile_table_row_index,
