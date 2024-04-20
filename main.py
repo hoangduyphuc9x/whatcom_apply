@@ -29,64 +29,87 @@ from selenium.webdriver.chrome.service import Service
 import string
 import re
 
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 WC_WEEKEND_TEAM_SHEET_ID = "1uEkPu8l7XUlTIM17S_Sdn40YcvbM4xEHWuXpuf7hGNE"
 TOOLS_SHEET_NAME = "Tools"
 IP_SHEET_NAME = "IP"
 PROMPT_TEXT_MAP = {
-    "1": "こんにちはと聞くとぺこりとお辞儀をするようになりました",
-    "2": "言葉遣いはその言葉を発する人柄を反映します",
-    "3": "宝くじに当たるより雷に打たれる確率の方が高いらしい",
-    "4": "本当かどうかわざわざ確かめた気得な人がいました",
-    "5": "職場の新幹パーティーの企画と実行を任された",
-    "6": "その名前はツートン、セトゥンなどと様々な日本語読みがある。",
-    "7": "その名前はツートンソトンなどといろいろな日本語読みがある",
-    "8": "海でウニや貝などを勝手に取ってはいけません",
-    "9": "政治的な後ろ盾のない光源氏は進化の地位に置かれた",
-    "10": "ビデオ判定が最も手っ取り早く確実な誤診対策である",
-    "11": "サッカーにおいても微量判定の是非が議論されています",
-    "12": "大学に限らず、全般的に日本の教育はキロに立たされている",
-    "13": "道路は道幅が狭く普通車同士が対抗するのも困難だった",
-    "14": "日本では完全禁煙を打たう施設はまだまだ少数派だ",
-    "15": "ハリーポッターを言語で読もうと頑張ってみた",
-    "16": "ダーウィンの死の起源は一部では依然受け入れられていない",
-    "17": "地元でのオリンピック開催という長年の夢が叶う",
-    "18": "開催地として立候補するには条件にかなわなければならない",
-    "19": "結婚にふさわしい相手を探すために日々婚活に励む",
-    "20": "マイクロチップは迷子になったペットを探すのに役立つ",
-    "21": "この仕事には的確な判断が求められる",
-    "22": "この仕事には的確な人材が求められる",
-    "23": "そこは全国有数のニシンの産地として有名だ",
-    "24": "そこは全国有数のミシンの生産地として知られる",
-    "25": "大河ドラマの影響でちょっとした坂本龍馬ブームだった",
-    "26": "病院へはいくつか山を越えていかなければならなかった",
-    "27": "その騒音はもはや我慢の限界を超えていた",
-    "28": "強風で倒れた大木の一部を植え直し再生を試みた",
-    "29": "枕草子は最も親しまれ暗唱されている古典の一つだ",
-    "30": "地元の博物館には古い木の橋が展示してある",
-    "31": "地元の博物館には古い木の箸が展示してある",
-    "32": "人形が倒れて花が取れてしまいました",
-    "33": "人形は倒れて鼻が取れてしまいました",
-    "34": "転んでぶつかって歯が折れてしまいました",
-    "35": "強い風にあおられて葉が折れてしまいました",
-    "36": "天気を間違えるとせっかくの眺望が台無しだ",
-    "37": "転記を間違えるとせっかくの帳簿が台無しだ",
-    "38": "政府は不正再発を防止するための取り組みを強化した",
-    "39": "政府は不正な開発を防止するための取り組みを強化した",
-    "40": "勝負においては形勢を保つことができるかどうかが大事だ",
-    "41": "勝負においては平成を楽すことができるかどうかが大事だ",
-    "42": "その点については再度の見直しが必要です",
-    "43": "その辺については態度の見直しが必要です",
-    "44": "大化の会心は日本初のクーデターと言われている",
-    "45": "東京スカイツリーには伝統技術を生かした耐震構造が用いられている",
-    "46": "それは家庭では上手に調理するのは難しい",
-    "47": "それは家庭では上手に修理するのは難しい",
-    "48": "誰もが今よそしと終戦を待ちわびていた",
-    "49": "職場で恒例の花見大会の漢字を任されてしまった",
-    "50": "職場で恒例の花火大会の漢字を任されてしまった",
-    "51": "首相の支持率に関する最近の世論調査の結果が出ました",
-    "52": "誰もが今やお祖師と抽選を待ちわびていた",
+    "JP": {
+        "1": "こんにちはと聞くとぺこりとお辞儀をするようになりました",
+        "2": "言葉遣いはその言葉を発する人柄を反映します",
+        "3": "宝くじに当たるより雷に打たれる確率の方が高いらしい",
+        "4": "本当かどうかわざわざ確かめた気得な人がいました",
+        "5": "職場の新幹パーティーの企画と実行を任された",
+        "6": "その名前はツートン、セトゥンなどと様々な日本語読みがある。",
+        "7": "その名前はツートンソトンなどといろいろな日本語読みがある",
+        "8": "海でウニや貝などを勝手に取ってはいけません",
+        "9": "政治的な後ろ盾のない光源氏は進化の地位に置かれた",
+        "10": "ビデオ判定が最も手っ取り早く確実な誤診対策である",
+        "11": "サッカーにおいても微量判定の是非が議論されています",
+        "12": "大学に限らず、全般的に日本の教育はキロに立たされている",
+        "13": "道路は道幅が狭く普通車同士が対抗するのも困難だった",
+        "14": "日本では完全禁煙を打たう施設はまだまだ少数派だ",
+        "15": "ハリーポッターを言語で読もうと頑張ってみた",
+        "16": "ダーウィンの死の起源は一部では依然受け入れられていない",
+        "17": "地元でのオリンピック開催という長年の夢が叶う",
+        "18": "開催地として立候補するには条件にかなわなければならない",
+        "19": "結婚にふさわしい相手を探すために日々婚活に励む",
+        "20": "マイクロチップは迷子になったペットを探すのに役立つ",
+        "21": "この仕事には的確な判断が求められる",
+        "22": "この仕事には的確な人材が求められる",
+        "23": "そこは全国有数のニシンの産地として有名だ",
+        "24": "そこは全国有数のミシンの生産地として知られる",
+        "25": "大河ドラマの影響でちょっとした坂本龍馬ブームだった",
+        "26": "病院へはいくつか山を越えていかなければならなかった",
+        "27": "その騒音はもはや我慢の限界を超えていた",
+        "28": "強風で倒れた大木の一部を植え直し再生を試みた",
+        "29": "枕草子は最も親しまれ暗唱されている古典の一つだ",
+        "30": "地元の博物館には古い木の橋が展示してある",
+        "31": "地元の博物館には古い木の箸が展示してある",
+        "32": "人形が倒れて花が取れてしまいました",
+        "33": "人形は倒れて鼻が取れてしまいました",
+        "34": "転んでぶつかって歯が折れてしまいました",
+        "35": "強い風にあおられて葉が折れてしまいました",
+        "36": "天気を間違えるとせっかくの眺望が台無しだ",
+        "37": "転記を間違えるとせっかくの帳簿が台無しだ",
+        "38": "政府は不正再発を防止するための取り組みを強化した",
+        "39": "政府は不正な開発を防止するための取り組みを強化した",
+        "40": "勝負においては形勢を保つことができるかどうかが大事だ",
+        "41": "勝負においては平成を楽すことができるかどうかが大事だ",
+        "42": "その点については再度の見直しが必要です",
+        "43": "その辺については態度の見直しが必要です",
+        "44": "大化の会心は日本初のクーデターと言われている",
+        "45": "東京スカイツリーには伝統技術を生かした耐震構造が用いられている",
+        "46": "それは家庭では上手に調理するのは難しい",
+        "47": "それは家庭では上手に修理するのは難しい",
+        "48": "誰もが今よそしと終戦を待ちわびていた",
+        "49": "職場で恒例の花見大会の漢字を任されてしまった",
+        "50": "職場で恒例の花火大会の漢字を任されてしまった",
+        "51": "首相の支持率に関する最近の世論調査の結果が出ました",
+        "52": "誰もが今やお祖師と抽選を待ちわびていた",
+    },
+    "DE": {
+        "1": "meine kinder gehen noch zur schule",
+        "2": "geboren bin ich in guatemala",
+        "3": "sehe sie nur einmal im Jahr",
+        "4": "und meine andere schwester in italien",
+        "5": "und aufgewachsen in den verschiedenen ländern, da meine eltern diplomaten sind",
+        "6": "und wohne derzeit in bad salzuflen",
+        "7": "und ich sehe ihn sehr selten. dementsprechend ziehe ich unsere kinder groß",
+        "8": "urlaub mache ich immer dort, wo sich meine verwandten befinden",
+        "9": "mein bruder lebt in spanien",
+        "10": "zu großen familienfeiern, sehen wir uns alle, was immer sehr nett ist. ja",
+        "11": "ich bin siebenundvierzig jahre alt",
+        "12": "sodass ich im prinzip um die ganze welt reise",
+        "13": "mein mann arbeitet für die deutsche bank in new york",
+        "14": "ich habe sieben geschwister, die über den globus verteilt leben",
+        "15": "was ich nicht besonders gut heiße. ich kann es ihr leider nicht verbieten",
+        "16": "der eine möchte zahnarzt werden",
+        "17": "die im alter zwischen zehn und achtzehn sind",
+        "18": "planen aber zu studieren",
+        "19": "mein name ist anna",
+        "20": "gelernt habe ich einzelhandelskauffrau und arbeite hier und da als aushilfe"
+    }
 }
 PAGE_LOAD_TIMEOUT = 120
 PROFILE_TABLE_HEADERS = [
@@ -503,12 +526,24 @@ def batch_update_google_sheet_range(body):
     serviceSpreadSheet.values().batchUpdate(spreadsheetId=WC_WEEKEND_TEAM_SHEET_ID, body=body).execute()
 
 
-def check_if_raw_proxy_ip_is_duplicate(ip_sheet_row_index):
+def check_if_raw_proxy_ip_is_duplicate(ip_sheet_row_index, local="JP"):
+    if local == "JP":
+        column_header_index = "E"
+    elif local == "DE":
+        column_header_index = "C"
     color_background_value_in_e_cell = get_google_sheet_cell_background_color(
-        f"{IP_SHEET_NAME}!E{ip_sheet_row_index}")
+        f"{IP_SHEET_NAME}!{column_header_index}{ip_sheet_row_index}")
     return color_background_value_in_e_cell.get("red", 0) != 1 or \
         color_background_value_in_e_cell.get("green", 0) != 1 or \
         color_background_value_in_e_cell.get("blue", 0) != 1
+
+
+def get_list_proxy_in_google_sheet_by_local(local="JP"):
+    if local == "JP":
+        column_header_index = "D"
+    elif local == "DE":
+        column_header_index = "B"
+    return get_google_sheet_ranges_values(f"{IP_SHEET_NAME}!{column_header_index}3:{column_header_index}")
 
 
 # END GOOGLE SHEET FUNCTIONS
@@ -703,6 +738,7 @@ def get_gologin_profiles(go_login_token: str):
 def reconnect_driver_to_debug_address(driver, debug_address: str):
     pass
 
+
 # def create_gologin_selenium_driver_via_id(gologin_api_key, gologin_profile_id):
 #     try:
 #     except:
@@ -872,6 +908,9 @@ class GoLoginDriverHandleThread(QThread):
     def __init__(self, gologin_continue_create_profile_data, parent=None):
         super().__init__(parent)
         self.profile_table_row_index, self.driver, self.whatcom_info = gologin_continue_create_profile_data
+        self.hotmail_password = self.whatcom_info.get("email|password")
+        self.local = self.whatcom_info.get("local")
+        self.list_prompt_text_map_from_local = PROMPT_TEXT_MAP.get(self.local)
 
     def update_result_to_profile_table(self, message_data_with_error):
         self.go_login_continue_create_profile_update_result_signal.emit({
@@ -954,8 +993,8 @@ class GoLoginDriverHandleThread(QThread):
         return None
 
     async def do_intelligent_attributes(self):
-        username_hotmail = self.whatcom_info["email|password"].split("|")[0]
-        password_hotmail = self.whatcom_info["email|password"].split("|")[1]
+        username_hotmail = self.email_password.split("|")[0]
+        password_hotmail = self.email_password.split("|")[1]
 
         # Lấy element có ID attributes0, nhập giá trị vào
         attributes0_element = await self.find_element_with_timeout(30, By.ID, "attributes0",
@@ -1204,7 +1243,7 @@ class GoLoginDriverHandleThread(QThread):
             return
 
         textarea_element.clear()
-        for character in PROMPT_TEXT_MAP[prompt_number]:
+        for character in self.list_prompt_text_map_from_local.get(prompt_number):
             textarea_element.send_keys(character)
             await asyncio.sleep(random.uniform(0, 0.5))
 
@@ -1444,6 +1483,7 @@ class MainWindow(QMainWindow):
         :return:
         """
         raw_proxy = self.profile_table.item(profile_table_row_index, self.PROXY_COLUMN_HEADER_INDEX).text()
+        local = self.profile_table.item(profile_table_row_index, self.LOCAL_COLUMN_HEADER_INDEX).text()
         proxy_extract = extract_proxy(raw_proxy)
         if proxy_extract is None:
             self.handle_cannot_extract_proxy_from_proxy_raw(profile_table_row_index)
@@ -1455,18 +1495,18 @@ class MainWindow(QMainWindow):
             return
 
         self.update_raw_proxy_ip_in_profile_table(profile_table_row_index, raw_proxy_ip)
-        japan_column_ip_sheet_values = get_google_sheet_ranges_values(f"{IP_SHEET_NAME}!D3:D")
+        column_ip_sheet_values = get_list_proxy_in_google_sheet_by_local(local)
 
-        if not japan_column_ip_sheet_values:
-            self.handle_no_values_in_japan_column_in_ip_sheet_error(profile_table_row_index)
+        if not column_ip_sheet_values:
+            self.handle_no_values_in_column_in_ip_sheet_error(profile_table_row_index)
             return
 
-        for japan_column_ip_sheet_value in japan_column_ip_sheet_values:
-            if japan_column_ip_sheet_value[0] == self.profile_table.item(profile_table_row_index,
-                                                                         self.ACCOUNT_INDEX_COLUMN_HEADER_INDEX).text():
-                ip_sheet_row_index = japan_column_ip_sheet_values.index(japan_column_ip_sheet_value) + 3
-                self.update_raw_proxy_ip_to_google_sheet(raw_proxy_ip, profile_table_row_index, ip_sheet_row_index)
-                raw_proxy_ip_is_duplicate = check_if_raw_proxy_ip_is_duplicate(ip_sheet_row_index)
+        for column_ip_sheet_value in column_ip_sheet_values:
+            if column_ip_sheet_value[0] == self.profile_table.item(profile_table_row_index,
+                                                                   self.ACCOUNT_INDEX_COLUMN_HEADER_INDEX).text():
+                ip_sheet_row_index = column_ip_sheet_values.index(column_ip_sheet_value) + 3
+                self.update_raw_proxy_ip_to_google_sheet(raw_proxy_ip, profile_table_row_index, ip_sheet_row_index, local)
+                raw_proxy_ip_is_duplicate = check_if_raw_proxy_ip_is_duplicate(ip_sheet_row_index, local)
                 if raw_proxy_ip_is_duplicate:
                     self.handle_duplicate_raw_proxy_ip(profile_table_row_index)
                 else:
@@ -1510,19 +1550,23 @@ class MainWindow(QMainWindow):
         self.profile_table.setItem(profile_table_row_index, self.IP_COLUMN_HEADER_INDEX,
                                    QTableWidgetItem(raw_proxy_ip))
 
-    def handle_no_values_in_japan_column_in_ip_sheet_error(self, profile_table_row_index):
+    def handle_no_values_in_column_in_ip_sheet_error(self, profile_table_row_index):
         self.update_result_cell_profile_table({
             "error": True,
             "message": "Không tìm thấy các mã số trong cột B của bảng IP",
             "profile_table_row_index": profile_table_row_index
         })
 
-    def update_raw_proxy_ip_to_google_sheet(self, raw_proxy_ip, profile_table_row_index, ip_sheet_row_index):
+    def update_raw_proxy_ip_to_google_sheet(self, raw_proxy_ip, profile_table_row_index, ip_sheet_row_index, local="JP"):
+        if local == "JP":
+            column_header_index = "E"
+        elif local == "DE":
+            column_header_index = "C"
         batch_update_google_sheet_range({
             "valueInputOption": "RAW",
             "data": [
                 {
-                    "range": f"{IP_SHEET_NAME}!E{ip_sheet_row_index}",
+                    "range": f"{IP_SHEET_NAME}!{column_header_index}{ip_sheet_row_index}",
                     "values": [[raw_proxy_ip]]
                 },
                 {
@@ -1676,7 +1720,7 @@ class MainWindow(QMainWindow):
 
     def continue_gologin_apply_in_driver(self, profile_table_row_index):
         selected_gologin_profile_id = self.profile_table.cellWidget(profile_table_row_index,
-                                                                 self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX).currentData()
+                                                                    self.PROFILE_GOLOGIN_COLUMN_HEADER_INDEX).currentData()
         if selected_gologin_profile_id == "0":
             return
 
@@ -1695,6 +1739,7 @@ class MainWindow(QMainWindow):
         go_login_continue_create_profile_thread = GoLoginDriverHandleThread((profile_table_row_index, driver, {
             "email|password": self.profile_table.item(profile_table_row_index,
                                                       self.HOTMAIL_PASS_COLUMN_HEADER_INDEX).text(),
+            "local": self.profile_table.item(profile_table_row_index, self.LOCAL_COLUMN_HEADER_INDEX).text()
         }))
         (go_login_continue_create_profile_thread.go_login_continue_create_profile_update_result_signal
          .connect(self.update_result_cell_profile_table))
